@@ -40,7 +40,7 @@ spec/                   # Tests + fixtures/hash_vectors.json
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Return full blockchain as JSON |
-| `GET` | `/validate` | Chain validity, height, tip hash |
+| `GET` | `/validate` | Chain validity, height, cumulative work, tip hash |
 | `GET` | `/block/:index` | Single block by index |
 | `POST` | `/new-block` | Body: `{ "data": "..." }` — mines and appends a block |
 
@@ -53,6 +53,8 @@ Default PoW difficulty: **3** leading zero hex digits (`Harpy::Block::DEFAULT_DI
 ### Validation
 
 Blocks must satisfy linkage, PoW prefix, hash integrity, and **monotonic timestamps** (child ≥ parent).
+
+Fork replacement (`Chain#replace_if_more_work_valid!`) compares **cumulative PoW work** — each block contributes `16^difficulty` (`Block#work`) — not block count alone. Threat model: `docs/THREAT_MODEL.md`.
 
 ## Roadmap (from project research)
 

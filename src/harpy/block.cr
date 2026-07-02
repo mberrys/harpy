@@ -42,6 +42,11 @@ module Harpy
       @hash.starts_with?("0" * @difficulty)
     end
 
+    # Expected hash trials for `difficulty` leading hex zeroes (16^difficulty).
+    def work : UInt64
+      1_u64 << (4 * @difficulty)
+    end
+
     def hash_matches? : Bool
       @hash == computed_hash
     end
