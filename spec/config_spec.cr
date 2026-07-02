@@ -18,6 +18,12 @@ describe Harpy::Config do
       Harpy::Config.genesis_difficulty.should eq(Harpy::Block::DEFAULT_DIFFICULTY)
     end
   end
+
+  it "exposes request and block data size limits" do
+    Harpy::Config.max_request_body_bytes.should eq(64 * 1024)
+    Harpy::Config.max_block_data_bytes.should eq(32 * 1024)
+    Harpy::Config.max_block_data_bytes.should be < Harpy::Config.max_request_body_bytes
+  end
 end
 
 describe "HARPY_DIFFICULTY genesis bootstrap" do

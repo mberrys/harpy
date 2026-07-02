@@ -55,7 +55,18 @@ New blocks inherit difficulty from the chain tip (`Miner.mine_next` copies the p
 
 Invalid values (negative or non-numeric) fall back to `DEFAULT_DIFFICULTY` (3).
 
-## 4. Automated tests
+## 4. Request size limits
+
+`POST /new-block` enforces two caps (see `Harpy::Config`):
+
+| Limit | Default | HTTP status |
+|-------|---------|-------------|
+| JSON request body | 64 KiB (`MAX_REQUEST_BODY_BYTES`) | 413 Payload Too Large |
+| Block `data` field | 32 KiB (`MAX_BLOCK_DATA_BYTES`) | 400 Bad Request |
+
+Oversized bodies are rejected before JSON parsing/mining. Keep payloads well under 32 KiB for the `data` string itself.
+
+## 5. Automated tests
 
 ```bash
 crystal spec
@@ -72,7 +83,7 @@ Specs use `difficulty: 0` in helpers so mining finishes instantly. Canonical has
 - Linkage: `index` increments and `prev_hash` matches parent
 - Timestamps: child `timestamp` must be **≥ parent** (monotonic)
 
-## 5. Research context
+## 6. Research context
 
 | Layer | What Harpy demonstrates today | Deferred |
 |-------|------------------------------|----------|
@@ -85,7 +96,7 @@ Further reading (attached to Linear issues):
 - [Production readiness research](https://app.notion.com/p/berrymichael/production-ready-29c4b9c70df84cc8a5a503b845c80541)
 - [Security hardening plan](https://app.notion.com/p/3919cb079ddb8132ae08f16afdd9f0a0)
 
-## 6. Anchoring endgame
+## 7. Anchoring endgame
 
 Harpy's intended integration pattern is **hash on-chain, data off-chain**: applications commit digests (e.g. Merkle roots of audit logs or records) while keeping payloads in IPFS, object storage, or local systems. The chain proves *that* a hash existed at a point in time — it is not a database for arbitrary large blobs.
 
