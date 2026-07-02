@@ -49,10 +49,23 @@ module Harpy
     def valid_against?(previous : Block) : Bool
       return false unless @index == previous.index + 1
       return false unless @prev_hash == previous.hash
+      return false unless timestamp_not_before?(previous)
       return false unless hash_matches?
       return false unless pow_valid?
 
       true
+    end
+
+    private def timestamp_not_before?(previous : Block) : Bool
+      self_time = parse_timestamp(@timestamp)
+      prev_time = parse_timestamp(previous.timestamp)
+      self_time >= prev_time
+    rescue Time::Format::Error
+      false
+    end
+
+    private def parse_timestamp(value : String) : Time
+      Time.parse(value, "%Y-%m-%d %H:%M:%S UTC", Time::Location::UTC)
     end
 
     def self.genesis(

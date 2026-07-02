@@ -15,4 +15,23 @@ module Harpy::SpecHelpers
 
     chain
   end
+
+  def self.with_env(key : String, value : String?, &)
+    previous = ENV[key]?
+    if value.nil?
+      ENV.delete(key)
+    else
+      ENV[key] = value
+    end
+
+    begin
+      yield
+    ensure
+      if previous.nil?
+        ENV.delete(key)
+      else
+        ENV[key] = previous
+      end
+    end
+  end
 end
