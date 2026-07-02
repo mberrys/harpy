@@ -30,7 +30,8 @@ src/
     chain.cr            # In-memory chain, append, fork replacement
     miner.cr            # Proof-of-work mining loop
     storage.cr          # JSON load/save, genesis bootstrap
-    config.cr           # HARPY_DIFFICULTY (genesis-only)
+    config.cr           # Env config, size limits, write auth
+    rate_limit.cr       # Per-IP token bucket on POST /new-block
     server.cr           # Kemal HTTP routes
 spec/                   # Tests + fixtures/hash_vectors.json
 ```
@@ -44,7 +45,29 @@ spec/                   # Tests + fixtures/hash_vectors.json
 | `GET` | `/block/:index` | Single block by index |
 | `POST` | `/new-block` | Body: `{ "data": "..." }` — mines and appends a block |
 
+`POST /new-block` responses (when validation fails):
+
+| Status | Condition |
+|--------|-----------|
+| 400 | Missing/invalid/empty `data`, or `data` exceeds 32 KiB |
+| 401 | `HARPY_API_KEY` set but request lacks valid credentials |
+| 413 | JSON body exceeds 64 KiB (Kemal body limit) |
+| 422 | Mined block rejected by chain validation |
+| 429 | Per-IP rate limit exceeded on `POST /new-block` |
+
 Default PoW difficulty: **3** leading zero hex digits (`Harpy::Block::DEFAULT_DIFFICULTY`). Override at genesis with `HARPY_DIFFICULTY` (see `docs/DEMO.md`).
+
+### Environment variables
+
+| Variable | Default | Scope |
+|----------|---------|-------|
+| `HARPY_DIFFICULTY` | `3` | Genesis only (ignored when `chain.json` exists) |
+| `HARPY_DATA_DIR` | `data/chain.json` | Directory → `…/chain.json`, or a `.json` file path |
+| `HARPY_API_KEY` | unset | When set, writes require `Authorization: Bearer` or `X-API-Key` |
+| `HARPY_RATE_LIMIT` | `2` | Max mining requests per client per window |
+| `HARPY_RATE_LIMIT_WINDOW` | `10` | Refill interval in seconds for the token bucket |
+
+Rate limiting applies only to `POST /new-block`. Client identity uses the first `X-Forwarded-For` hop when present, otherwise the remote address. See `docs/DEMO.md` for curl examples and `docs/THREAT_MODEL.md` for deployment guidance.
 
 ### Hash serialization
 
@@ -58,13 +81,12 @@ Fork replacement (`Chain#replace_if_more_work_valid!`) compares **cumulative PoW
 
 ## Roadmap (from project research)
 
-1. **Now:** blocks + SHA-256 + PoW + HTTP endpoints (tutorial scope)
-2. Harden validation — full chain validation, longest-valid-chain selection
-3. Pick a state model — UTXO vs accounts (design before coding)
-4. P2P networking — gossip, orphan pool, fork choice, reorgs
-5. Persistent storage — embedded KV (RocksDB/LMDB equivalent)
-6. Adjustable difficulty — retarget from observed block times
-7. Optional: minimal VM with gas metering
+1. **Done (tutorial + hardening):** blocks, SHA-256, PoW, HTTP API, chain validation, cumulative-work fork choice, rate limits, write auth, request size caps
+2. Pick a state model — UTXO vs accounts (design before coding)
+3. P2P networking — gossip, orphan pool, fork choice, reorgs
+4. Persistent storage — atomic writes, embedded KV (RocksDB/LMDB equivalent)
+5. Adjustable difficulty — retarget from observed block times
+6. Optional: minimal VM with gas metering; Merkle anchoring API (MIC-81)
 
 ## Conventions
 
