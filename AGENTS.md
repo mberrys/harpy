@@ -25,10 +25,14 @@ This is an **educational, single-node** chain — not production blockchain soft
 src/
   harpy.cr              # Entry point → starts Kemal server
   harpy/
-    types.cr            # Harpy::VERSION + Harpy::BlockType
-    block.cr            # Create, hash, mine (PoW), validate blocks
-    chain.cr            # In-memory blockchain (genesis + append)
-    server.cr           # GET / and POST /new-block
+    types.cr            # Harpy::VERSION
+    block.cr            # Block struct, SHA-256 hashing, validation
+    chain.cr            # In-memory chain, append, fork replacement
+    miner.cr            # Proof-of-work mining loop
+    storage.cr          # JSON load/save, genesis bootstrap
+    config.cr           # HARPY_DIFFICULTY (genesis-only)
+    server.cr           # Kemal HTTP routes
+spec/                   # Tests + fixtures/hash_vectors.json
 ```
 
 ### HTTP API
@@ -36,9 +40,19 @@ src/
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Return full blockchain as JSON |
+| `GET` | `/validate` | Chain validity, height, tip hash |
+| `GET` | `/block/:index` | Single block by index |
 | `POST` | `/new-block` | Body: `{ "data": "..." }` — mines and appends a block |
 
-Default PoW difficulty: **3** leading zero hex digits (`Harpy::Block::DEFAULT_DIFFICULTY`).
+Default PoW difficulty: **3** leading zero hex digits (`Harpy::Block::DEFAULT_DIFFICULTY`). Override at genesis with `HARPY_DIFFICULTY` (see `docs/DEMO.md`).
+
+### Hash serialization
+
+`Block#computed_hash` SHA-256 digests a fixed multiline string of `index`, `timestamp`, `data`, `prev_hash`, and `nonce`. **`difficulty` is not included.** Pinned vectors: `spec/fixtures/hash_vectors.json`.
+
+### Validation
+
+Blocks must satisfy linkage, PoW prefix, hash integrity, and **monotonic timestamps** (child ≥ parent).
 
 ## Roadmap (from project research)
 

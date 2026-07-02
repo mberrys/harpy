@@ -40,6 +40,24 @@ describe Harpy::Block do
 
     tampered.valid_against?(genesis).should be_false
   end
+
+  it "accepts a child block with the same timestamp as its parent" do
+    genesis = Harpy::SpecHelpers.mined_genesis
+    same_time = Harpy::Miner.mine(
+      Harpy::Block.new(1, genesis.timestamp, "same time", genesis.hash, genesis.difficulty),
+    )
+
+    same_time.valid_against?(genesis).should be_true
+  end
+
+  it "rejects a child block with a timestamp before its parent" do
+    genesis = Harpy::SpecHelpers.mined_genesis
+    backdated = Harpy::Miner.mine(
+      Harpy::Block.new(1, "2020-01-01 00:00:00 UTC", "backdated", genesis.hash, genesis.difficulty),
+    )
+
+    backdated.valid_against?(genesis).should be_false
+  end
 end
 
 describe Harpy::Chain do
@@ -55,6 +73,17 @@ describe Harpy::Chain do
     orphan = Harpy::Miner.mine(Harpy::Block.new(99, Time.utc.to_s, "orphan", "missing", 0))
 
     chain.append!(orphan).should be_false
+    chain.height.should eq(2)
+  end
+
+  it "rejects appending a block with a regressive timestamp" do
+    chain = Harpy::SpecHelpers.build_chain(2)
+    tip = chain.tip
+    backdated = Harpy::Miner.mine(
+      Harpy::Block.new(tip.index + 1, "2020-01-01 00:00:00 UTC", "backdated", tip.hash, tip.difficulty),
+    )
+
+    chain.append!(backdated).should be_false
     chain.height.should eq(2)
   end
 

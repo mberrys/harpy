@@ -40,6 +40,15 @@ crystal run src/harpy.cr
 
 The chain is persisted to `data/chain.json` on startup and after each mined block.
 
+Set genesis mining difficulty with `HARPY_DIFFICULTY` (only when creating a new chain):
+
+```bash
+rm -f data/chain.json
+HARPY_DIFFICULTY=1 crystal run src/harpy.cr
+```
+
+See **[docs/DEMO.md](docs/DEMO.md)** for the full walkthrough, curl examples, difficulty table, and testing steps.
+
 ## Development
 
 ```bash
@@ -64,10 +73,9 @@ data/chain.json        # persisted chain (created at runtime)
 ## Roadmap
 
 1. Tutorial scope: PoW blocks + HTTP API (current on `feat/blockchain-hardening`)
-2. Canonical hash test vectors (MIC-30)
-3. Threat model and hardening (MIC-33+)
-4. State model (UTXO or accounts)
-5. P2P networking and reorg handling
-6. Adjustable difficulty
+2. Threat model and hardening (MIC-33+)
+3. State model (UTXO or accounts)
+4. P2P networking and reorg handling
+5. Adjustable difficulty retargeting
 
 See [AGENTS.md](./AGENTS.md) for agent-oriented guidance and references.

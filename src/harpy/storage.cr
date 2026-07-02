@@ -1,4 +1,5 @@
 require "json"
+require "./config"
 
 module Harpy
   class StorageError < Exception; end
@@ -26,7 +27,7 @@ module Harpy
 
         chain
       else
-        chain = Chain.genesis_chain(verbose: verbose)
+        chain = Chain.genesis_chain(difficulty: Config.genesis_difficulty, verbose: verbose)
         save(chain, path)
         chain
       end

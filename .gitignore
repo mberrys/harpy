@@ -1,5 +1,6 @@
 # Crystal / Shards
 /docs/
+!/docs/DEMO.md
 /lib/
 /bin/
 /.shards/
