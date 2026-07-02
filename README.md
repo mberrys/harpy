@@ -49,6 +49,8 @@ HARPY_DIFFICULTY=1 crystal run src/harpy.cr
 
 See **[docs/DEMO.md](docs/DEMO.md)** for the full walkthrough, curl examples, difficulty table, and testing steps.
 
+Security posture for the open HTTP mining API is documented in **[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)** (layer taxonomy, assets, threat catalog, Linear issue mapping).
+
 ## Development
 
 ```bash

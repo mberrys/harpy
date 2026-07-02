@@ -24,6 +24,69 @@ describe Harpy::Config do
     Harpy::Config.max_block_data_bytes.should eq(32 * 1024)
     Harpy::Config.max_block_data_bytes.should be < Harpy::Config.max_request_body_bytes
   end
+
+  it "uses the default storage path when HARPY_DATA_DIR is unset" do
+    Harpy::SpecHelpers.with_env("HARPY_DATA_DIR", nil) do
+      Harpy::Config.storage_path.should eq(Harpy::Storage::DEFAULT_PATH)
+    end
+  end
+
+  it "treats HARPY_DATA_DIR as a directory" do
+    Harpy::SpecHelpers.with_env("HARPY_DATA_DIR", "custom-data") do
+      Harpy::Config.storage_path.should eq("custom-data/chain.json")
+    end
+  end
+
+  it "treats HARPY_DATA_DIR ending in .json as a file path" do
+    Harpy::SpecHelpers.with_env("HARPY_DATA_DIR", "custom-data/my-chain.json") do
+      Harpy::Config.storage_path.should eq("custom-data/my-chain.json")
+    end
+  end
+
+  it "uses default rate limit settings when env is unset" do
+    Harpy::SpecHelpers.with_env("HARPY_RATE_LIMIT", nil) do
+      Harpy::SpecHelpers.with_env("HARPY_RATE_LIMIT_WINDOW", nil) do
+        Harpy::Config.rate_limit_max.should eq(Harpy::Config::DEFAULT_RATE_LIMIT_MAX)
+        Harpy::Config.rate_limit_window_seconds.should eq(Harpy::Config::DEFAULT_RATE_LIMIT_WINDOW_S)
+      end
+    end
+  end
+
+  it "reads rate limit settings from env" do
+    Harpy::SpecHelpers.with_env("HARPY_RATE_LIMIT", "5") do
+      Harpy::SpecHelpers.with_env("HARPY_RATE_LIMIT_WINDOW", "30") do
+        Harpy::Config.rate_limit_max.should eq(5)
+        Harpy::Config.rate_limit_window_seconds.should eq(30)
+      end
+    end
+  end
+
+  it "allows writes when HARPY_API_KEY is unset" do
+    request = HTTP::Request.new("POST", "/new-block")
+    Harpy::SpecHelpers.with_env("HARPY_API_KEY", nil) do
+      Harpy::Config.write_authorized?(request).should be_true
+    end
+  end
+
+  it "accepts Authorization Bearer for write auth" do
+    request = HTTP::Request.new("POST", "/new-block")
+    request.headers["Authorization"] = "Bearer secret-key"
+
+    Harpy::Config.write_authorized?(request, "secret-key").should be_true
+  end
+
+  it "accepts X-API-Key for write auth" do
+    request = HTTP::Request.new("POST", "/new-block")
+    request.headers["X-API-Key"] = "secret-key"
+
+    Harpy::Config.write_authorized?(request, "secret-key").should be_true
+  end
+
+  it "rejects missing credentials when HARPY_API_KEY is set" do
+    request = HTTP::Request.new("POST", "/new-block")
+
+    Harpy::Config.write_authorized?(request, "secret-key").should be_false
+  end
 end
 
 describe "HARPY_DIFFICULTY genesis bootstrap" do

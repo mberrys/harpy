@@ -50,10 +50,23 @@ module Harpy::SpecHelpers
     end
   end
 
-  def self.extend_fork_from(genesis : Harpy::Block, block_count : Int32, label : String = "fork") : Harpy::Chain
+  def self.extend_fork_from(
+    genesis : Harpy::Block,
+    block_count : Int32,
+    label : String = "fork",
+    difficulty : Int32? = nil,
+  ) : Harpy::Chain
     fork = Harpy::Chain.new([genesis])
     (1...block_count).each do |index|
-      fork.append!(Harpy::Miner.mine_next(fork.tip, "#{label} #{index}")).should be_true
+      block_difficulty = difficulty || fork.tip.difficulty
+      candidate = Harpy::Block.new(
+        fork.tip.index + 1,
+        Time.utc.to_s,
+        "#{label} #{index}",
+        fork.tip.hash,
+        block_difficulty,
+      )
+      fork.append!(Harpy::Miner.mine(candidate)).should be_true
     end
     fork
   end

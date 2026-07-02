@@ -87,16 +87,22 @@ describe Harpy::Chain do
     chain.height.should eq(2)
   end
 
-  it "replaces the chain only with a longer valid candidate" do
+  it "replaces the chain only with a valid candidate that has more cumulative work" do
     chain = Harpy::SpecHelpers.build_chain(2)
     longer = Harpy::SpecHelpers.build_chain(3)
 
-    chain.replace_if_longer_valid!(longer.blocks).should be_true
+    chain.replace_if_more_work_valid!(longer.blocks).should be_true
     chain.height.should eq(3)
 
     shorter = Harpy::SpecHelpers.build_chain(2)
-    chain.replace_if_longer_valid!(shorter.blocks).should be_false
+    chain.replace_if_more_work_valid!(shorter.blocks).should be_false
     chain.height.should eq(3)
+  end
+
+  it "sums cumulative work as 16^difficulty per block" do
+    chain = Harpy::SpecHelpers.build_chain(3, difficulty: 2)
+
+    chain.cumulative_work.should eq(3_u64 * (1_u64 << 8))
   end
 end
 

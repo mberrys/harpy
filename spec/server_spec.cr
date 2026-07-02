@@ -20,7 +20,14 @@ def harpy_call_request(request : HTTP::Request)
   HTTP::Client::Response.from_io(io, decompress: false)
 end
 
-def harpy_test_response(method : String, path : String, body : String? = nil)
+def harpy_test_response(
+  method : String,
+  path : String,
+  body : String? = nil,
+  api_key : String? = nil,
+  headers : Hash(String, String) = {} of String => String,
+  rate_limiter : Harpy::RateLimiter = Harpy::RateLimiter.new(max_tokens: 100, refill_seconds: 60),
+)
   Kemal.config.clear
   Kemal::FilterHandler::INSTANCE.tree = Radix::Tree(Array(Kemal::FilterHandler::FilterBlock)).new
   Kemal::RouteHandler::INSTANCE.routes = Radix::Tree(Kemal::Route).new
@@ -30,12 +37,13 @@ def harpy_test_response(method : String, path : String, body : String? = nil)
 
   storage_path = File.tempname
   Harpy::Storage.save(Harpy::SpecHelpers.build_chain(1), storage_path)
-  Harpy::Server.reset!(storage_path)
-  Harpy::Server.configure_kemal!
+  Harpy::Server.reset!(storage_path, api_key)
+  Harpy::Server.configure_kemal!(rate_limiter)
   Harpy::Server.register_routes!
 
   request = HTTP::Request.new(method, path)
   request.headers["Content-Type"] = "application/json"
+  headers.each { |name, value| request.headers[name] = value }
 
   if body
     request.body = IO::Memory.new(body.to_slice)
@@ -70,5 +78,38 @@ describe "POST /new-block request limits" do
 
     response.status_code.should eq(200)
     JSON.parse(response.body)["data"].as_s.bytesize.should eq(Harpy::Config.max_block_data_bytes - 20)
+  end
+end
+
+describe "POST /new-block API key auth" do
+  it "returns 401 when the API key is required but missing" do
+    response = harpy_test_response("POST", "/new-block", %({"data":"hello"}), api_key: "secret")
+
+    response.status_code.should eq(401)
+    response.body.should eq(%({"error":"unauthorized"}))
+  end
+
+  it "accepts Authorization Bearer when an API key is configured" do
+    response = harpy_test_response(
+      "POST",
+      "/new-block",
+      %({"data":"authenticated"}),
+      api_key: "secret",
+      headers: {"Authorization" => "Bearer secret"},
+    )
+
+    response.status_code.should eq(200)
+  end
+
+  it "accepts X-API-Key when an API key is configured" do
+    response = harpy_test_response(
+      "POST",
+      "/new-block",
+      %({"data":"authenticated"}),
+      api_key: "secret",
+      headers: {"X-API-Key" => "secret"},
+    )
+
+    response.status_code.should eq(200)
   end
 end

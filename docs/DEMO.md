@@ -26,7 +26,7 @@ On first boot the server mines a **genesis block** and saves it to `data/chain.j
 | Step | Command | What to observe |
 |------|---------|-----------------|
 | View chain | `curl http://localhost:3000/` | JSON array; genesis `hash` starts with `000` |
-| Validate | `curl http://localhost:3000/validate` | `{"valid":true,"height":1,"tip":"..."}` |
+| Validate | `curl http://localhost:3000/validate` | `{"valid":true,"height":1,"work":4096,"tip":"..."}` — `work` is cumulative PoW score |
 | Mine a block | `curl -X POST http://localhost:3000/new-block -H "Content-Type: application/json" -d '{"data":"hello harpy"}'` | Mined block JSON; nonce logged in server output |
 | Lookup block | `curl http://localhost:3000/block/1` | Block 1 links to genesis via `prev_hash` |
 | Persistence | `cat data/chain.json` | Same blocks on disk |
@@ -88,8 +88,10 @@ Specs use `difficulty: 0` in helpers so mining finishes instantly. Canonical has
 | Layer | What Harpy demonstrates today | Deferred |
 |-------|------------------------------|----------|
 | **Tutorial** | PoW blocks, HTTP read/write, JSON persistence | P2P, UTXO/accounts |
-| **Production readiness** | Deterministic hashing, chain validation, invalid-chain rejection on boot | Rate limits, full threat model |
-| **Hardening plan** | `Chain#valid?`, `/validate`, naive longest-chain replacement | Cumulative work fork choice, atomic writes |
+| **Production readiness** | Deterministic hashing, chain validation, invalid-chain rejection on boot | Rate limits, deployment auth |
+| **Hardening plan** | `Chain#valid?`, `/validate`, cumulative-work fork choice | Atomic writes, P2P fork rules |
+
+See **[THREAT_MODEL.md](./THREAT_MODEL.md)** for the full threat catalog (layers, assets, trust boundaries, Linear issue mapping).
 
 Further reading (attached to Linear issues):
 
