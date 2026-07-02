@@ -41,13 +41,22 @@ class Harpy::Chain
     true
   end
 
-  def replace_if_longer_valid!(candidate : Array(Harpy::Block)) : Bool
+  def cumulative_work : UInt64
+    @blocks.sum(0_u64) { |block| block.work }
+  end
+
+  def replace_if_more_work_valid!(candidate : Array(Harpy::Block)) : Bool
     replacement = Harpy::Chain.new(candidate)
     return false unless replacement.valid?
-    return false unless candidate.size > @blocks.size
+    return false unless replacement.cumulative_work > cumulative_work
 
     @blocks = candidate
     true
+  end
+
+  # Deprecated name — fork choice uses cumulative PoW work, not block count.
+  def replace_if_longer_valid!(candidate : Array(Harpy::Block)) : Bool
+    replace_if_more_work_valid!(candidate)
   end
 
   def self.genesis_chain(

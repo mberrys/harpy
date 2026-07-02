@@ -1,6 +1,7 @@
 # Crystal / Shards
 /docs/
 !/docs/DEMO.md
+!/docs/THREAT_MODEL.md
 /lib/
 /bin/
 /.shards/
