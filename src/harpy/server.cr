@@ -41,11 +41,15 @@ module Harpy
       post "/new-block" do |env|
         body = env.params.json
 
-        unless body.as_h.has_key?("data")
+        unless data_field = body["data"]?
           halt env, status_code: 400, response: %({"error":"missing data field"})
         end
 
-        data = body["data"].as_s
+        unless data_field.is_a?(String)
+          halt env, status_code: 400, response: %({"error":"data must be a string"})
+        end
+
+        data = data_field
 
         if data.empty?
           halt env, status_code: 400, response: %({"error":"data cannot be empty"})
