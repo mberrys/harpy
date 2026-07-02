@@ -1,0 +1,254 @@
+[
+  {
+    "milestone": "Phase 1: Consensus & validation hardening",
+    "labels": ["security", "documentation", "phase-1"],
+    "title": "Document Harpy threat model",
+    "body": "## Summary\nWrite a short threat model for Harpy assuming deployment on a LAN or small VPS with eventual real users.\n\n## Threats to cover\n- Tampered block/chain → cumulative work + signed blocks\n- DoS via `POST /new-block` → rate limits, payload caps, optional API key\n- Disk corruption → atomic writes + checksum\n- Unauthorized writes → signed transactions or API token\n- Double-spend → UTXO/account state\n- Eclipse/fork attacks → P2P diversity + most-work rule\n\n## Deliverable\n`docs/threat-model.md` with actors, assets, trust boundaries, and phase mapping.\n\n## Acceptance criteria\n- [ ] Lists assumptions and out-of-scope items\n- [ ] Maps threats to roadmap phases\n- [ ] States Harpy is educational, not production"
+  },
+  {
+    "milestone": "Phase 1: Consensus & validation hardening",
+    "labels": ["security", "consensus", "phase-1"],
+    "title": "Add cumulative work scoring for fork choice",
+    "body": "## Summary\nReplace block-count-only fork choice with cumulative proof-of-work scoring.\n\n## Implementation\n- Add `Chain#cumulative_work` (e.g. `sum(2**difficulty)` per block)\n- Update `replace_if_longer_valid!` to compare work, not just height\n- Expose work score on `GET /validate`\n\n## Acceptance criteria\n- [ ] Longer but lower-work chain is rejected\n- [ ] Higher-work chain wins even if shorter\n- [ ] `/validate` returns `work` field\n- [ ] `crystal spec` covers fork-by-work\n\n## Depends on\nPR #1 baseline validation"
+  },
+  {
+    "milestone": "Phase 1: Consensus & validation hardening",
+    "labels": ["security", "consensus", "phase-1"],
+    "title": "Enforce monotonic block timestamps",
+    "body": "## Summary\nReject blocks whose timestamp is before their parent's timestamp.\n\n## Implementation\n- Add check in `Block#valid_against?`\n- Use UTC consistently; document timestamp format\n\n## Acceptance criteria\n- [ ] `timestamp < parent.timestamp` fails validation\n- [ ] Spec covers valid and invalid cases\n- [ ] Genesis exempt from parent check"
+  },
+  {
+    "milestone": "Phase 1: Consensus & validation hardening",
+    "labels": ["security", "consensus", "phase-1"],
+    "title": "Cap block data payload size",
+    "body": "## Summary\nReject oversize block data before mining to prevent memory/DoS abuse.\n\n## Implementation\n- Define `MAX_BLOCK_DATA_BYTES` (e.g. 64 KB)\n- Validate in HTTP handler before `Miner.mine_next`\n- Validate in `Chain#append!` for defense in depth\n\n## Acceptance criteria\n- [ ] POST with data > cap returns 400\n- [ ] Oversize blocks rejected without mining\n- [ ] Spec asserts limit"
+  },
+  {
+    "milestone": "Phase 1: Consensus & validation hardening",
+    "labels": ["consensus", "phase-1"],
+    "title": "Add canonical hash test vectors for crystal-blockchain compatibility",
+    "body": "## Summary\nEnsure Harpy hash algorithm remains verifiable against upstream tutorial blocks.\n\n## Implementation\n- Add fixture blocks from [crystal-blockchain](https://github.com/bradford-hamilton/crystal-blockchain)\n- Spec asserts `computed_hash` matches expected values\n- Document multiline hash input format\n\n## Acceptance criteria\n- [ ] At least genesis + one mined block vector\n- [ ] Canonical format documented in spec or AGENTS.md"
+  },
+  {
+    "milestone": "Phase 1: Consensus & validation hardening",
+    "labels": ["security", "consensus", "phase-1"],
+    "title": "Property tests for tamper detection and weak forks",
+    "body": "## Summary\nAdd specs proving random tampering invalidates chains and weak forks lose.\n\n## Implementation\n- Tamper hash, nonce, index, prev_hash → `valid?` false\n- Competing chains: lower-work fork rejected\n\n## Acceptance criteria\n- [ ] Multiple tamper scenarios in `spec/`\n- [ ] Weak fork rejection tested with cumulative work"
+  },
+  {
+    "milestone": "Phase 1: Consensus & validation hardening",
+    "labels": ["security", "consensus", "phase-1"],
+    "title": "Integration test: most-work chain wins fork",
+    "body": "## Summary\nEnd-to-end spec: two competing valid chains; node selects most cumulative work.\n\n## Implementation\n- Build chains A and B sharing a common prefix\n- Fork with different mining effort\n- Assert fork selector picks correct tip\n\n## Acceptance criteria\n- [ ] Integration spec in `spec/`\n- [ ] Behavior documented in AGENTS.md"
+  },
+  {
+    "milestone": "Phase 2: API & operational security",
+    "labels": ["security", "api", "phase-2"],
+    "title": "Rate limit POST /new-block",
+    "body": "## Summary\nPrevent CPU exhaustion from unlimited mining requests.\n\n## Implementation\n- Per-IP token bucket via Kemal middleware\n- Configurable limits via env (e.g. `HARPY_RATE_LIMIT`)\n- Return 429 with `Retry-After` when exceeded\n\n## Acceptance criteria\n- [ ] Flood POST returns 429\n- [ ] Legitimate traffic still works under limit\n- [ ] Spec or integration test for rate limit behavior"
+  },
+  {
+    "milestone": "Phase 2: API & operational security",
+    "labels": ["security", "api", "phase-2"],
+    "title": "Enforce JSON request body size limit",
+    "body": "## Summary\nReject oversized HTTP bodies before parsing/mining.\n\n## Implementation\n- Set max body size in Kemal config or middleware\n- Return 413/400 with clear error\n\n## Acceptance criteria\n- [ ] Oversize body rejected before mining starts\n- [ ] Limit documented in README/AGENTS.md"
+  },
+  {
+    "milestone": "Phase 2: API & operational security",
+    "labels": ["security", "api", "phase-2"],
+    "title": "Optional async mining endpoint (202 + job id)",
+    "body": "## Summary\nSeparate mine from append so CPU abuse is bounded and clients can poll status.\n\n## Implementation\n- `POST /mine` returns 202 + job id\n- `GET /mine/:id` returns status/result\n- Bounded job queue with TTL\n\n## Acceptance criteria\n- [ ] Mining no longer blocks HTTP thread indefinitely (or document sync-only mode)\n- [ ] Queue cap prevents unbounded memory growth\n- [ ] Documented API in AGENTS.md"
+  },
+  {
+    "milestone": "Phase 2: API & operational security",
+    "labels": ["security", "api", "phase-2"],
+    "title": "Bind server to 127.0.0.1 by default",
+    "body": "## Summary\nSafe default: local-only binding unless explicitly configured for public exposure.\n\n## Implementation\n- Default Kemal bind `127.0.0.1`\n- `HARPY_HOST=0.0.0.0` to expose publicly\n- README warning when binding publicly\n\n## Acceptance criteria\n- [ ] Default bind is loopback\n- [ ] Public bind requires explicit env var\n- [ ] Documented in README"
+  },
+  {
+    "milestone": "Phase 2: API & operational security",
+    "labels": ["security", "api", "phase-2"],
+    "title": "Environment-based configuration",
+    "body": "## Summary\nCentralize runtime config via environment variables.\n\n## Variables\n- `HARPY_API_KEY` — optional auth for write endpoints\n- `HARPY_DATA_DIR` — chain storage path\n- `HARPY_DIFFICULTY` — PoW difficulty override\n- `HARPY_HOST` / `HARPY_PORT`\n\n## Acceptance criteria\n- [ ] All vars documented with defaults\n- [ ] Server reads env on boot\n- [ ] Specs cover config parsing where practical"
+  },
+  {
+    "milestone": "Phase 2: API & operational security",
+    "labels": ["security", "api", "phase-2"],
+    "title": "Structured logging for chain events",
+    "body": "## Summary\nLog block accepted/rejected and validation failures without leaking secrets.\n\n## Implementation\n- Structured log lines (JSON or key=value)\n- Events: block_accepted, block_rejected, chain_invalid, storage_error\n- Never log API keys or private material\n\n## Acceptance criteria\n- [ ] Validation failures produce actionable logs\n- [ ] No secrets in log output\n- [ ] Documented log fields"
+  },
+  {
+    "milestone": "Phase 2: API & operational security",
+    "labels": ["security", "api", "phase-2"],
+    "title": "Add GET /health endpoint",
+    "body": "## Summary\nOperational health check for deployments and monitoring.\n\n## Response\n- `valid`: chain validation status\n- `height`: block count\n- `last_save_at`: timestamp of last successful persistence\n- `work`: cumulative work (when available)\n\n## Acceptance criteria\n- [ ] Returns 200 when chain valid\n- [ ] Returns 503 when chain invalid\n- [ ] Documented in AGENTS.md API table"
+  },
+  {
+    "milestone": "Phase 3: Storage integrity",
+    "labels": ["security", "storage", "phase-3"],
+    "title": "Atomic chain file writes",
+    "body": "## Summary\nPrevent corrupted chain files from partial writes.\n\n## Implementation\n- Write to temp file in same directory\n- `fsync` then atomic rename over `data/chain.json`\n\n## Acceptance criteria\n- [ ] Kill during write → restart loads previous valid chain or fails safe\n- [ ] Spec simulates interrupted write (temp file left behind handled)"
+  },
+  {
+    "milestone": "Phase 3: Storage integrity",
+    "labels": ["security", "storage", "phase-3"],
+    "title": "Add SHA-256 checksum envelope for chain persistence",
+    "body": "## Summary\nDetect on-disk tampering and corruption via checksum.\n\n## Implementation\n- Envelope: `{version, checksum, blocks}`\n- Checksum over canonical JSON of blocks array\n- Reject load on mismatch with clear `StorageError`\n\n## Acceptance criteria\n- [ ] Tampered file rejected at boot\n- [ ] Round-trip spec preserves checksum\n- [ ] Version field present for migrations"
+  },
+  {
+    "milestone": "Phase 3: Storage integrity",
+    "labels": ["storage", "phase-3"],
+    "title": "Chain storage schema versioning and migrations",
+    "body": "## Summary\nSupport evolving on-disk format without silent corruption.\n\n## Implementation\n- `version` field in storage envelope\n- Migration path v1 → v2 when schema changes\n- Fail with actionable error on unknown version\n\n## Acceptance criteria\n- [ ] Version bump documented\n- [ ] At least one migration test or stub\n- [ ] Unknown version does not silently load"
+  },
+  {
+    "milestone": "Phase 3: Storage integrity",
+    "labels": ["storage", "phase-3"],
+    "title": "Spike embedded KV backend (RocksDB/LMDB) behind Storage interface",
+    "body": "## Summary\nEvaluate real embedded DB for scale; keep JSON fallback on Windows preview.\n\n## Implementation\n- Abstract `Harpy::Storage` backend trait/interface\n- Spike Crystal shard for RocksDB or LMDB\n- Document Windows/Crystal preview limitations\n\n## Acceptance criteria\n- [ ] JSON backend still works\n- [ ] Spike doc with go/no-go recommendation\n- [ ] No regression in existing storage specs"
+  },
+  {
+    "milestone": "Phase 3: Storage integrity",
+    "labels": ["storage", "phase-3"],
+    "title": "CLI: export-chain and verify-chain commands",
+    "body": "## Summary\nBackup and offline validation tooling for operators.\n\n## Implementation\n- `shards build` binary or `crystal run` subcommands\n- `harpy export-chain` → stdout or file\n- `harpy verify-chain <file>` → exit 0/1\n\n## Acceptance criteria\n- [ ] Export produces validatable JSON\n- [ ] Verify detects invalid/tampered chains\n- [ ] Documented in README"
+  },
+  {
+    "milestone": "Phase 4: State model & transaction security",
+    "labels": ["documentation", "state", "phase-4"],
+    "title": "Design doc: UTXO state model",
+    "body": "## Summary\n**Design gate** — pick and document state model before P2P or reorgs.\n\n## Decision\nResearch recommends UTXO for learning double-spend prevention.\n\n## Deliverable\n- UTXO set schema\n- Coinbase rules and block reward\n- Maturity depth (e.g. 100 blocks for reorg safety)\n- Undo data requirements for reorgs\n\n## Acceptance criteria\n- [ ] Design reviewed before implementation issues start\n- [ ] Linked from AGENTS.md\n- [ ] Explicitly blocks Phase 5 until approved"
+  },
+  {
+    "milestone": "Phase 4: State model & transaction security",
+    "labels": ["security", "state", "phase-4"],
+    "title": "Implement signed Transaction struct",
+    "body": "## Summary\nReplace free-form `data` string with structured, signed transactions.\n\n## Fields\n- `from`, `to`, `amount`, `fee`, `signature`, inputs/outputs (UTXO)\n\n## Acceptance criteria\n- [ ] Transaction JSON serializable\n- [ ] Invalid signature rejected\n- [ ] Block body carries tx list not arbitrary string"
+  },
+  {
+    "milestone": "Phase 4: State model & transaction security",
+    "labels": ["security", "state", "phase-4"],
+    "title": "Ed25519 keypair signing and verification",
+    "body": "## Summary\nCryptographic ownership of transactions.\n\n## Implementation\n- Crystal `crypto` stdlib or shard for Ed25519\n- Sign tx hash; verify on mempool and block acceptance\n- Document key format for CLI/wallet (future)\n\n## Acceptance criteria\n- [ ] Valid signature passes; invalid fails\n- [ ] Spec covers tampered tx body\n- [ ] No private keys logged"
+  },
+  {
+    "milestone": "Phase 4: State model & transaction security",
+    "labels": ["security", "state", "phase-4"],
+    "title": "Mempool with transaction validation",
+    "body": "## Summary\nHold pending transactions; validate before mining.\n\n## Implementation\n- `Harpy::Mempool` with add/remove/evict\n- Validate balance, signature, double-spend against UTXO set\n- Reject invalid txs at API boundary\n\n## Acceptance criteria\n- [ ] Double-spend in mempool rejected\n- [ ] Insufficient balance rejected\n- [ ] Miner pulls from mempool, not raw POST data"
+  },
+  {
+    "milestone": "Phase 4: State model & transaction security",
+    "labels": ["state", "phase-4"],
+    "title": "Miner includes mempool transactions in blocks",
+    "body": "## Summary\nBlocks carry validated transactions from mempool.\n\n## Implementation\n- Select txs up to block size limit\n- Optional merkle root over tx ids\n- Coinbase tx for block reward\n\n## Acceptance criteria\n- [ ] Mined block contains mempool txs\n- [ ] Empty mempool still mines coinbase-only block\n- [ ] Spec covers multi-tx block"
+  },
+  {
+    "milestone": "Phase 4: State model & transaction security",
+    "labels": ["economics", "state", "phase-4"],
+    "title": "Block reward and fee sink",
+    "body": "## Summary\nMinimal tokenomics: coinbase reward + fees to miner.\n\n## Implementation\n- Fixed block reward constant\n- Fees sum from included txs\n- UTXO set updated on block apply\n\n## Acceptance criteria\n- [ ] Coinbase creates new UTXO for miner\n- [ ] Fees attributed correctly\n- [ ] Spec verifies supply conservation"
+  },
+  {
+    "milestone": "Phase 4: State model & transaction security",
+    "labels": ["security", "state", "phase-4"],
+    "title": "Tests: double-spend, insufficient balance, bad signature",
+    "body": "## Summary\nCore state security test suite.\n\n## Scenarios\n- Spend same UTXO twice (mempool + blocks)\n- Spend more than balance\n- Wrong signature / wrong key\n\n## Acceptance criteria\n- [ ] All scenarios fail closed\n- [ ] `crystal spec` green\n- [ ] Tests documented as security invariants"
+  },
+  {
+    "milestone": "Phase 5: P2P, reorgs & network security",
+    "labels": ["p2p", "phase-5"],
+    "title": "P2P gossip transport between nodes",
+    "body": "## Summary\nMulti-node block propagation.\n\n## Implementation\n- Evaluate lightweight TCP vs Crystal libp2p shard\n- Message types: `inv`, `block`, `get_blocks`\n- Configurable peer list / bootstrap nodes\n\n## Acceptance criteria\n- [ ] Two nodes sync blocks over network\n- [ ] Documented run instructions for multi-node local test\n- [ ] Depends on Phase 4 UTXO design complete"
+  },
+  {
+    "milestone": "Phase 5: P2P, reorgs & network security",
+    "labels": ["p2p", "consensus", "phase-5"],
+    "title": "Orphan block pool for out-of-order arrivals",
+    "body": "## Summary\nBuffer blocks received before their parent is known.\n\n## Implementation\n- Orphan pool keyed by prev_hash\n- Promote to chain when parent arrives\n- TTL/size cap on orphan pool\n\n## Acceptance criteria\n- [ ] Block 105 before 104 is retained, not dropped\n- [ ] Orphan pool bounded\n- [ ] Spec or integration test"
+  },
+  {
+    "milestone": "Phase 5: P2P, reorgs & network security",
+    "labels": ["consensus", "p2p", "phase-5"],
+    "title": "Most-cumulative-work fork choice over network",
+    "body": "## Summary\nNetwork-wide fork resolution using work score.\n\n## Implementation\n- Compare incoming chains by cumulative work\n- Replace local tip when heavier valid chain received\n- Integrate with orphan handling\n\n## Acceptance criteria\n- [ ] Heavier fork becomes tip\n- [ ] Lighter fork rejected\n- [ ] Uses Phase 1 cumulative work"
+  },
+  {
+    "milestone": "Phase 5: P2P, reorgs & network security",
+    "labels": ["security", "state", "p2p", "phase-5"],
+    "title": "Reorg handler with per-block undo data",
+    "body": "## Summary\nSafely roll back and apply forks without corrupting UTXO state.\n\n## Implementation\n- Store undo data per block (spent/created UTXOs)\n- On reorg: unwind blocks, restore UTXO set, apply new chain\n- Budget ~350+ LOC per research reference\n\n## Acceptance criteria\n- [ ] Reorg restores exact prior UTXO set\n- [ ] No funds created or destroyed incorrectly\n- [ ] Unit tests for unwind/rewind"
+  },
+  {
+    "milestone": "Phase 5: P2P, reorgs & network security",
+    "labels": ["security", "p2p", "phase-5"],
+    "title": "Peer limits, handshake, and ban misbehaving peers",
+    "body": "## Summary\nBasic network abuse resistance.\n\n## Implementation\n- Max connections per peer/IP\n- Handshake with chain id / genesis hash\n- Ban peers sending invalid blocks repeatedly\n\n## Acceptance criteria\n- [ ] Invalid block flood does not stall node\n- [ ] Wrong genesis peer rejected\n- [ ] Ban list evicts bad actors"
+  },
+  {
+    "milestone": "Phase 5: P2P, reorgs & network security",
+    "labels": ["security", "p2p", "phase-5"],
+    "title": "Reject blocks failing full validation and state transition",
+    "body": "## Summary\nDefense in depth at network boundary.\n\n## Implementation\n- Full block + PoW + tx + UTXO transition validation before accept\n- Never persist or relay invalid blocks\n\n## Acceptance criteria\n- [ ] Invalid block from peer not appended\n- [ ] Invalid block not relayed\n- [ ] Logged with peer id"
+  },
+  {
+    "milestone": "Phase 5: P2P, reorgs & network security",
+    "labels": ["p2p", "state", "phase-5"],
+    "title": "Integration test: 3 nodes, reorg, UTXO consistency",
+    "body": "## Summary\n**Critical** multi-node test from research §4.2.\n\n## Scenario\n1. Spin up 3 nodes\n2. Mine on competing forks\n3. Trigger reorg\n4. Assert all nodes converge; UTXO sets match\n\n## Acceptance criteria\n- [ ] Automated integration test (may use subprocesses)\n- [ ] Documented in README as release gate\n- [ ] Catches reorg accounting bugs"
+  },
+  {
+    "milestone": "Phase 6: Economic & consensus tuning",
+    "labels": ["consensus", "economics", "phase-6"],
+    "title": "Difficulty retargeting from observed block times",
+    "body": "## Summary\nAdjust PoW difficulty every N blocks to target block interval.\n\n## Implementation\n- Track timestamps of last retarget window\n- Adjust difficulty up/down with bounds\n- Store difficulty in block header (already present)\n\n## Acceptance criteria\n- [ ] Fast blocks → difficulty increases\n- [ ] Slow blocks → difficulty decreases\n- [ ] Spec with synthetic timestamps"
+  },
+  {
+    "milestone": "Phase 6: Economic & consensus tuning",
+    "labels": ["documentation", "consensus", "phase-6"],
+    "title": "Document probabilistic vs strong finality",
+    "body": "## Summary\nExplain Harpy's finality model for educational clarity.\n\n## Content\n- PoW probabilistic finality\n- How depth reduces reorg risk\n- Why coinbase maturity matters\n\n## Acceptance criteria\n- [ ] Doc in `docs/` or AGENTS.md\n- [ ] Links to research §3 finality discussion"
+  },
+  {
+    "milestone": "Phase 6: Economic & consensus tuning",
+    "labels": ["economics", "phase-6"],
+    "title": "Minimum transaction fee anti-spam",
+    "body": "## Summary\nPrevent mempool flooding once transactions exist.\n\n## Implementation\n- `MIN_TX_FEE` constant or dynamic floor\n- Reject below-minimum fee txs\n\n## Acceptance criteria\n- [ ] Zero-fee spam rejected (unless coinbase)\n- [ ] Spec covers boundary fee"
+  },
+  {
+    "milestone": "Phase 6: Economic & consensus tuning",
+    "labels": ["economics", "state", "phase-6"],
+    "title": "Coinbase maturity before spendable",
+    "body": "## Summary\nCoinbase outputs unspendable until N confirmations (reorg safety).\n\n## Implementation\n- Track coinbase maturity depth (e.g. 100 blocks)\n- UTXO spend check includes maturity\n\n## Acceptance criteria\n- [ ] Immature coinbase cannot be spent\n- [ ] Mature coinbase can be spent\n- [ ] Spec covers edge at maturity boundary"
+  },
+  {
+    "milestone": "Phase 7: Smart contract surface (optional)",
+    "labels": ["vm", "phase-7"],
+    "title": "Threat model for smart contract layer",
+    "body": "## Summary\nOWASP/a16z-style threat model before any VM work.\n\n## Deliverable\n- Attack surfaces: reentrancy, access control, gas griefing\n- Explicit out-of-scope for educational VM\n\n## Acceptance criteria\n- [ ] Reviewed before VM implementation\n- [ ] Linked from Phase 7 issues"
+  },
+  {
+    "milestone": "Phase 7: Smart contract surface (optional)",
+    "labels": ["vm", "phase-7"],
+    "title": "Minimal stack VM with gas metering",
+    "body": "## Summary\nTiny stack-based VM to teach EVM-style execution limits.\n\n## Implementation\n- Opcode set: arithmetic, storage, halt\n- Gas cost per opcode; tx gas limit\n- Halt on out-of-gas\n\n## Acceptance criteria\n- [ ] Infinite loop tx runs out of gas\n- [ ] Storage writes cost more than arithmetic\n- [ ] Spec covers gas exhaustion"
+  },
+  {
+    "milestone": "Phase 7: Smart contract surface (optional)",
+    "labels": ["vm", "phase-7"],
+    "title": "Fuzz and property tests for VM",
+    "body": "## Summary\nStress-test VM and state transitions.\n\n## Implementation\n- Random opcode sequences within gas limit\n- Property: total gas used <= limit\n- Property: state rollback on failure\n\n## Acceptance criteria\n- [ ] Fuzz/property suite in CI\n- [ ] Document how to run locally"
+  },
+  {
+    "milestone": "Phase 7: Smart contract surface (optional)",
+    "labels": ["security", "vm", "phase-7"],
+    "title": "No upgradeable contracts without timelock story",
+    "body": "## Summary\nIf upgrade path exists, document governance + timelock requirements.\n\n## Acceptance criteria\n- [ ] Either no upgrades, or timelock + multisig documented\n- [ ] OWASP proxy/upgrade category addressed"
+  },
+  {
+    "milestone": "Phase 7: Smart contract surface (optional)",
+    "labels": ["security", "documentation", "phase-7"],
+    "title": "External audit checklist before real value",
+    "body": "## Summary\nPre-mainnet checklist (educational reference).\n\n## References\n- [OWASP SCS](https://scs.owasp.org/)\n- [a16z crypto checklist](https://a16zcrypto.com/posts/article/smart-contract-security-checklist-web3-development/)\n- Solodit / SCSFG\n\n## Acceptance criteria\n- [ ] `docs/audit-checklist.md` adapted for Harpy scope\n- [ ] Explicitly states Harpy is not production-ready"
+  }
+]
