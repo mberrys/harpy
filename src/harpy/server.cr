@@ -47,6 +47,7 @@ module Harpy
       Kemal.config do |config|
         config.max_request_body_size = Config.max_request_body_bytes
         config.host_binding = Config.bind_host
+        config.port = Config.http_port
       end
 
       Kemal.config.add_handler RateLimitHandler.new(rate_limiter)
@@ -67,11 +68,11 @@ module Harpy
           p2p_status = if network = @@p2p
                          eclipse = network.peer_manager.eclipse_status
                          {
-                           enabled:       true,
-                           peers:         network.peer_manager.peers.size,
-                           orphans:       network.orphan_pool.size,
-                           eclipse_risk:  eclipse.at_risk,
-                           peer_subnets:  eclipse.distinct_subnets,
+                           enabled:      true,
+                           peers:        network.peer_manager.peers.size,
+                           orphans:      network.orphan_pool.size,
+                           eclipse_risk: eclipse.at_risk,
+                           peer_subnets: eclipse.distinct_subnets,
                          }
                        else
                          {enabled: false}

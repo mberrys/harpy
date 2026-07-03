@@ -19,7 +19,7 @@ end
 describe "3-node reorg integration" do
   it "keeps UTXO sets consistent after a heavier fork propagates" do
     base = 9400 + Random.rand(200)
-    paths = 3.times.map { File.tempname }
+    paths = Array.new(3) { File.tempname }
     networks = [] of Harpy::P2p::Network
 
     begin

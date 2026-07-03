@@ -36,8 +36,8 @@ module Harpy
     end
 
     class PeerManager
-      MAX_OUTBOUND = 8
-      MAX_INBOUND  = 32
+      MAX_OUTBOUND  =  8
+      MAX_INBOUND   = 32
       BAN_THRESHOLD = 10
 
       getter peers : Array(Peer)
@@ -87,6 +87,8 @@ module Harpy
           outbound_count < MAX_OUTBOUND && @eclipse_guard.can_accept_peer(address)
         when PeerDirection::Inbound
           inbound_count < MAX_INBOUND && @eclipse_guard.can_accept_peer(address)
+        else
+          false
         end
       end
 

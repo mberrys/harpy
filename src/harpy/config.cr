@@ -14,11 +14,12 @@ module Harpy
     DEFAULT_RATE_LIMIT_MAX      =  2
     DEFAULT_RATE_LIMIT_WINDOW_S = 10
 
-    DEFAULT_P2P_PORT            = 9333
-    MAX_P2P_MESSAGE_BYTES       = 512 * 1024
+    DEFAULT_P2P_PORT      = 9333
+    MAX_P2P_MESSAGE_BYTES = 512 * 1024
 
     # Bind to loopback by default; require an explicit opt-in to expose on the LAN/public interfaces.
     DEFAULT_BIND_HOST = "127.0.0.1"
+    DEFAULT_HTTP_PORT = 3000
 
     def max_request_body_bytes : Int32
       MAX_REQUEST_BODY_BYTES
@@ -56,6 +57,15 @@ module Harpy
       end
 
       DEFAULT_BIND_HOST
+    end
+
+    def http_port : Int32
+      if value = ENV["HARPY_HTTP_PORT"]? || ENV["PORT"]?
+        parsed = value.to_i
+        return parsed if parsed > 0
+      end
+
+      DEFAULT_HTTP_PORT
     end
 
     # Whether to trust the `X-Forwarded-For` header for client identification

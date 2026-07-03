@@ -2,14 +2,14 @@ module Harpy
   module P2p
     # Local reputation scoring (StarveSpam-style) for mempool and gossip spam control.
     class Reputation
-      INITIAL_SCORE     = 100
-      MIN_SCORE         = 0
-      MAX_SCORE         = 200
-      SPAM_PENALTY      = 10
-      INVALID_PENALTY   = 25
-      GOOD_BLOCK_BONUS  = 2
-      RATE_WINDOW_SEC   = 10
-      MAX_INV_PER_WINDOW = 50
+      INITIAL_SCORE      = 100
+      MIN_SCORE          =   0
+      MAX_SCORE          = 200
+      SPAM_PENALTY       =  10
+      INVALID_PENALTY    =  25
+      GOOD_BLOCK_BONUS   =   2
+      RATE_WINDOW_SEC    =  10
+      MAX_INV_PER_WINDOW =  50
 
       def initialize
         @scores = {} of String => Int32

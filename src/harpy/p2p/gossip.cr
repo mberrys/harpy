@@ -76,12 +76,14 @@ module Harpy
         Log.info { "p2p_listening port=#{@port}" }
 
         while @running
-          socket = @server.not_nil!.accept
-          address = socket.remote_address.try(&.to_s) || "unknown"
-          spawn { handle_connection(socket, address, PeerDirection::Inbound) }
-        rescue ex
-          break unless @running
-          Log.warn { "p2p_accept_error error=#{ex.message}" }
+          begin
+            socket = @server.not_nil!.accept
+            address = socket.remote_address.try(&.to_s) || "unknown"
+            spawn { handle_connection(socket, address, PeerDirection::Inbound) }
+          rescue ex
+            break unless @running
+            Log.warn { "p2p_accept_error error=#{ex.message}" }
+          end
         end
       end
 

@@ -21,7 +21,7 @@ module Harpy
     module Eclipse
       extend self
 
-      MIN_DISTINCT_SUBNETS = 2
+      MIN_DISTINCT_SUBNETS =    2
       MAX_SUBNET_SHARE     = 0.75
 
       def subnet_16(address : String) : String
@@ -60,9 +60,9 @@ module Harpy
 
     # Bitcoin-style eclipse countermeasures: bucketing, anchors, feelers, test-before-evict.
     class EclipseGuard
-      MAX_PER_SUBNET     = 2
-      FEELER_INTERVAL_S  = 120
-      ANCHOR_SLOTS       = 2
+      MAX_PER_SUBNET    =   2
+      FEELER_INTERVAL_S = 120
+      ANCHOR_SLOTS      =   2
 
       getter anchor_peers : Array(String)
 
@@ -104,8 +104,8 @@ module Harpy
       end
 
       # Test-before-evict: prefer evicting a non-anchor peer from an over-represented /16.
-      def eviction_candidate(peer_addresses : Array(String), protected : Array(String) = [] of String) : String?
-        candidates = peer_addresses.reject { |addr| protected.includes?(addr) || @anchor_peers.includes?(addr) }
+      def eviction_candidate(peer_addresses : Array(String), exempt : Array(String) = [] of String) : String?
+        candidates = peer_addresses.reject { |addr| exempt.includes?(addr) || @anchor_peers.includes?(addr) }
         return nil if candidates.empty?
 
         counts = Hash(String, Int32).new
