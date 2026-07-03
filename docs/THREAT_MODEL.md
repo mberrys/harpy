@@ -101,14 +101,18 @@ Tune defaults with `HARPY_RATE_LIMIT` (bucket capacity, default `2`) and `HARPY_
 
 **Attack:** Edit `chain.json`, truncate file, or swap in an invalid chain.
 
-**Impact:** Node refuses invalid chain on boot (`StorageError`); valid tampered chain could be accepted if PoW checks pass.
+**Impact:** Corruption (bit-rot/truncation/edits) is rejected on load via checksum; a tampered chain with a recomputed checksum is still caught by full-chain validation if PoW/linkage checks fail.
 
 **Mitigations:**
 
+- Atomic writes: temp file + `File.rename`, so a crash mid-write cannot leave a partial file ([MIC-39](https://linear.app/mbx2/issue/MIC-39)).
+- Checksum envelope: `{checksum, blocks}` with `SHA-256(blocks.to_json)`, verified on load before any Chain is built — a corruption check distinct from semantic validation ([MIC-48](https://linear.app/mbx2/issue/MIC-48)).
 - Full-chain validation on load (`Chain#valid?`).
+- Backend interface isolates the on-disk format ([MIC-49](https://linear.app/mbx2/issue/MIC-49); see [STORAGE_BACKENDS.md](./STORAGE_BACKENDS.md)).
+- `verify-chain` CLI for out-of-band integrity checks ([MIC-52](https://linear.app/mbx2/issue/MIC-52)).
 - Configurable path via `HARPY_DATA_DIR` ([MIC-43](https://linear.app/mbx2/issue/MIC-43)).
 
-**Residual risk:** Non-atomic writes, no checksum/signature on file. **Deferred:** atomic persistence, embedded KV ([roadmap](https://linear.app/mbx2/project/harpy-16c5704dd57d/overview)).
+**Residual risk:** No cryptographic signature on the file (checksum detects accidental corruption, not a determined tamperer who recomputes it — that class is caught only by `Chain#valid?`). **Deferred:** embedded KV backend ([STORAGE_BACKENDS.md](./STORAGE_BACKENDS.md)).
 
 ### 6. Block / hash integrity
 
