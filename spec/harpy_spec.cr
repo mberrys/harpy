@@ -58,6 +58,22 @@ describe Harpy::Block do
 
     backdated.valid_against?(genesis).should be_false
   end
+
+  it "accepts a block with data at the configured size cap" do
+    genesis = Harpy::SpecHelpers.mined_genesis
+    next_block = Harpy::Miner.mine_next(genesis, "y" * Harpy::Config.max_block_data_bytes)
+
+    next_block.data_within_limit?.should be_true
+    next_block.valid_against?(genesis).should be_true
+  end
+
+  it "rejects a block with data exceeding the configured size cap, even if mined and hash-valid" do
+    genesis = Harpy::SpecHelpers.mined_genesis
+    oversized = Harpy::Miner.mine_next(genesis, "y" * (Harpy::Config.max_block_data_bytes + 1))
+
+    oversized.data_within_limit?.should be_false
+    oversized.valid_against?(genesis).should be_false
+  end
 end
 
 describe Harpy::Chain do
@@ -126,6 +142,23 @@ describe Harpy::Storage do
   it "refuses to boot from an invalid stored chain" do
     path = File.tempname
     invalid = Harpy::Chain.new([Harpy::Block.new(0, "2026-01-01", "bad", "", 0, "0", "invalid")])
+
+    begin
+      Harpy::Storage.save(invalid, path)
+      expect_raises Harpy::StorageError do
+        Harpy::Storage.load_or_genesis(path)
+      end
+    ensure
+      File.delete?(path) if File.exists?(path)
+    end
+  end
+
+  it "refuses to boot from a stored chain with an oversize genesis payload" do
+    path = File.tempname
+    oversized_genesis = Harpy::Miner.mine(
+      Harpy::Block.genesis("y" * (Harpy::Config.max_block_data_bytes + 1), difficulty: 0),
+    )
+    invalid = Harpy::Chain.new([oversized_genesis])
 
     begin
       Harpy::Storage.save(invalid, path)

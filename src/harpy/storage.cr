@@ -1,4 +1,5 @@
 require "json"
+require "log"
 require "./config"
 
 module Harpy
@@ -6,6 +7,8 @@ module Harpy
 
   module Storage
     extend self
+
+    Log = ::Log.for("harpy.storage")
 
     DEFAULT_PATH = "data/chain.json"
 
@@ -23,7 +26,10 @@ module Harpy
 
     def load_or_genesis(path : String = DEFAULT_PATH, verbose : Bool = false) : Chain
       if chain = load(path)
-        raise StorageError.new("stored chain failed validation") unless chain.valid?
+        unless chain.valid?
+          Log.error { "chain_load_failed path=#{path} reason=validation_failed" }
+          raise StorageError.new("stored chain failed validation")
+        end
 
         chain
       else

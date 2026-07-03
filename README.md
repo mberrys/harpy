@@ -34,6 +34,7 @@ crystal run src/harpy.cr
 ```
 
 - **View chain:** `GET http://localhost:3000/`
+- **Health check:** `GET http://localhost:3000/health`
 - **Validate chain:** `GET http://localhost:3000/validate`
 - **Get block by index:** `GET http://localhost:3000/block/:index`
 - **Mine a block:** `POST http://localhost:3000/new-block` with JSON body `{ "data": "your block data" }`
@@ -49,6 +50,7 @@ The chain is persisted to `data/chain.json` on startup and after each mined bloc
 | `HARPY_API_KEY` | Optional write auth for `POST /new-block` |
 | `HARPY_RATE_LIMIT` | Max mining requests per client per window (default `2`) |
 | `HARPY_RATE_LIMIT_WINDOW` | Token-bucket refill interval in seconds (default `10`) |
+| `HARPY_BIND_HOST` | Interface to bind (default `127.0.0.1`; set `0.0.0.0` to expose on the LAN) |
 
 Example — faster genesis for local demos:
 
