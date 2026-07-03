@@ -6,6 +6,10 @@
 !/docs/STORAGE_BACKENDS.md
 !/docs/SELFISH_MINING.md
 !/docs/CONFIRMATION_DEPTH.md
+!/docs/FINALITY.md
+!/docs/SYBIL_RESISTANCE.md
+!/docs/POS_CHECKPOINTING.md
+!/docs/INCIDENT_RESPONSE.md
 /lib/
 /bin/
 /.shards/

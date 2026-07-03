@@ -113,4 +113,58 @@ describe "transaction security" do
 
     chain.mempool.add(tx, chain.utxo_set, chain.height.to_u32).should eq(Harpy::Mempool::AddResult::Accepted)
   end
+
+  it "rejects zero-fee transactions" do
+    chain, miner_key, _ = Harpy::TransactionSecuritySpecHelpers.mature_chain_with_miner
+    coinbase = chain.blocks.first.transactions.first.as(Harpy::CoinbaseTx)
+    outpoint = Harpy::OutPoint.new(coinbase.txid, 0_u32)
+
+    recipient_key, _ = Harpy::SpecHelpers.generate_keypair
+    recipient = Harpy::Crypto.pubkey_hex(recipient_key.verify_key)
+    # Spend entire input with no fee left for miner
+    send_amount = Harpy::Economics::BLOCK_REWARD
+
+    tx = Harpy::Transaction.new(
+      inputs: [Harpy::TxInput.new(outpoint)],
+      outputs: [Harpy::TxOutput.new(send_amount, recipient)],
+    ).sign_all(miner_key)
+
+    chain.mempool.add(tx, chain.utxo_set, chain.height.to_u32).should eq(Harpy::Mempool::AddResult::Invalid)
+  end
+
+  it "accepts a transaction paying exactly MIN_TX_FEE" do
+    chain, miner_key, _ = Harpy::TransactionSecuritySpecHelpers.mature_chain_with_miner
+    coinbase = chain.blocks.first.transactions.first.as(Harpy::CoinbaseTx)
+    outpoint = Harpy::OutPoint.new(coinbase.txid, 0_u32)
+
+    recipient_key, _ = Harpy::SpecHelpers.generate_keypair
+    recipient = Harpy::Crypto.pubkey_hex(recipient_key.verify_key)
+    fee = Harpy::Economics::MIN_TX_FEE
+    send_amount = Harpy::Economics::BLOCK_REWARD - fee
+
+    tx = Harpy::Transaction.new(
+      inputs: [Harpy::TxInput.new(outpoint)],
+      outputs: [Harpy::TxOutput.new(send_amount, recipient)],
+    ).sign_all(miner_key)
+
+    chain.mempool.add(tx, chain.utxo_set, chain.height.to_u32).should eq(Harpy::Mempool::AddResult::Accepted)
+  end
+
+  it "rejects a transaction paying below MIN_TX_FEE" do
+    chain, miner_key, _ = Harpy::TransactionSecuritySpecHelpers.mature_chain_with_miner
+    coinbase = chain.blocks.first.transactions.first.as(Harpy::CoinbaseTx)
+    outpoint = Harpy::OutPoint.new(coinbase.txid, 0_u32)
+
+    recipient_key, _ = Harpy::SpecHelpers.generate_keypair
+    recipient = Harpy::Crypto.pubkey_hex(recipient_key.verify_key)
+    fee = Harpy::Economics::MIN_TX_FEE - 1
+    send_amount = Harpy::Economics::BLOCK_REWARD - fee
+
+    tx = Harpy::Transaction.new(
+      inputs: [Harpy::TxInput.new(outpoint)],
+      outputs: [Harpy::TxOutput.new(send_amount, recipient)],
+    ).sign_all(miner_key)
+
+    chain.mempool.add(tx, chain.utxo_set, chain.height.to_u32).should eq(Harpy::Mempool::AddResult::Invalid)
+  end
 end

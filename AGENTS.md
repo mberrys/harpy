@@ -109,7 +109,17 @@ Transaction `txid` and signing digest: SHA-256 over canonical JSON of `version`,
 
 Blocks must satisfy linkage, PoW prefix, hash integrity, and **monotonic timestamps** (child ≥ parent).
 
-Fork replacement (`Chain#replace_if_more_work_valid!`) compares **cumulative PoW work** — each block contributes `16^difficulty` (`Block#work`) — not block count alone. Threat model: `docs/THREAT_MODEL.md`. Selfish-mining thresholds: `docs/SELFISH_MINING.md`. Confirmation depth: `docs/CONFIRMATION_DEPTH.md`.
+Fork replacement (`Chain#replace_if_more_work_valid!`) compares **cumulative PoW work** — each block contributes `16^difficulty` (`Block#work`) — not block count alone. Threat model: `docs/THREAT_MODEL.md`. Selfish-mining thresholds: `docs/SELFISH_MINING.md`. Confirmation depth: `docs/CONFIRMATION_DEPTH.md`. Finality model: `docs/FINALITY.md`.
+
+### Economics
+
+| Constant | Value | Notes |
+|----------|-------|-------|
+| `BLOCK_REWARD` | `50_000_000` base units | Coinbase per block |
+| `MIN_TX_FEE` | `1_000` base units | Mempool anti-spam floor ([MIC-61](https://linear.app/mbx2/issue/MIC-61)) |
+| `COINBASE_MATURITY` | `100` blocks | Before coinbase outputs are spendable |
+| `RETARGET_INTERVAL` | `10` blocks | Difficulty adjustment window |
+| `TARGET_BLOCK_TIME_SEC` | `60` | Retarget target |
 
 ## AI-assisted development security gates
 

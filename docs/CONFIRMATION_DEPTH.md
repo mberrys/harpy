@@ -61,7 +61,7 @@ For **low-value** tutorial demos (faucet, classroom), **3** confirmations (~3 mi
 | Staging with untrusted writers | 6 |
 | Any real value | **Not supported** — Harpy is educational; remeasure on a production fork |
 
-Expose `confirmations` on `GET /validate` or per-tx status in a future API ([MIC-55](https://linear.app/mbx2/issue/MIC-55) finality doc).
+Expose `confirmations` on `GET /validate` or per-tx status in a future API. See [FINALITY.md](./FINALITY.md) ([MIC-55](https://linear.app/mbx2/issue/MIC-55)).
 
 ## Related documents
 
