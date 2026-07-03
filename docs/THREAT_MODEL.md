@@ -47,6 +47,21 @@ Following layer-based blockchain security surveys ([Li et al. arXiv:1802.06993](
 
 **Residual risk:** Distributed flood from many IPs; no global quota. **Deferred:** [MIC-68](https://linear.app/mbx2/issue/MIC-68) (broader hardening), production reverse proxy / WAF.
 
+Tune defaults with `HARPY_RATE_LIMIT` (bucket capacity, default `2`) and `HARPY_RATE_LIMIT_WINDOW` (refill interval in seconds, default `10`). See [DEMO.md](./DEMO.md#6-rate-limiting).
+
+### 1b. Oversized request bodies (API layer)
+
+**Attack:** Send very large JSON bodies to `/new-block` to consume memory or CPU before rejection.
+
+**Impact:** Memory pressure, slow parsing, potential DoS adjunct to mining abuse.
+
+**Mitigations (in repo):**
+
+- Kemal `max_request_body_size` capped at 64 KiB (`Harpy::Config::MAX_REQUEST_BODY_BYTES`) → HTTP 413 ([MIC-38](https://linear.app/mbx2/issue/MIC-38)).
+- Block `data` field capped at 32 KiB after parse → HTTP 400.
+
+**Residual risk:** Many small valid requests still trigger mining. Combine with rate limits and write auth.
+
 ### 2. Unauthorized chain extension
 
 **Attack:** Anonymous clients append blocks when the node is exposed on a network.
@@ -130,7 +145,8 @@ This closes the “same height, weaker PoW” gap from naive longest-chain-by-co
 | Control | Tutorial (local) | Exposed deployment |
 |---------|------------------|-------------------|
 | `HARPY_API_KEY` | Unset | Set; terminate TLS at proxy |
-| Rate limit | Default token bucket | Tune capacity/refill; add edge rate limits |
+| Rate limit | `HARPY_RATE_LIMIT=2`, `HARPY_RATE_LIMIT_WINDOW=10` | Tune capacity/refill; add edge rate limits |
+| Request size | 64 KiB body / 32 KiB `data` (fixed in code) | Same; reject at reverse proxy if desired |
 | `HARPY_DATA_DIR` | `data/chain.json` | Dedicated volume, backups |
 | Exposure | `localhost` only | Firewall; do not expose mining to the public internet |
 
@@ -141,6 +157,7 @@ This closes the “same height, weaker PoW” gap from naive longest-chain-by-co
 - [MIC-33](https://linear.app/mbx2/issue/MIC-33) — this document
 - [MIC-35](https://linear.app/mbx2/issue/MIC-35) — cumulative work
 - [MIC-39](https://linear.app/mbx2/issue/MIC-39) — P2P (future attack surface)
+- [MIC-38](https://linear.app/mbx2/issue/MIC-38) — HTTP body size limit
 - [MIC-41](https://linear.app/mbx2/issue/MIC-41) — rate limiting
 - [MIC-43](https://linear.app/mbx2/issue/MIC-43) — environment config
 - [MIC-68](https://linear.app/mbx2/issue/MIC-68) — eclipse countermeasures

@@ -66,7 +66,64 @@ Invalid values (negative or non-numeric) fall back to `DEFAULT_DIFFICULTY` (3).
 
 Oversized bodies are rejected before JSON parsing/mining. Keep payloads well under 32 KiB for the `data` string itself.
 
-## 5. Automated tests
+## 5. Write authentication (`HARPY_API_KEY`)
+
+By default, `POST /new-block` accepts anonymous writes (local development only). Set `HARPY_API_KEY` to require credentials on every mining request.
+
+```bash
+HARPY_API_KEY=dev-secret crystal run src/harpy.cr
+```
+
+| Header | Example |
+|--------|---------|
+| `Authorization` | `Bearer dev-secret` |
+| `X-API-Key` | `dev-secret` |
+
+```bash
+# 401 without credentials
+curl -X POST http://localhost:3000/new-block \
+  -H "Content-Type: application/json" \
+  -d '{"data":"hello"}'
+
+# 200 with Bearer token
+curl -X POST http://localhost:3000/new-block \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer dev-secret" \
+  -d '{"data":"hello harpy"}'
+```
+
+Read endpoints (`GET /`, `/validate`, `/block/:index`) remain unauthenticated.
+
+## 6. Rate limiting
+
+`POST /new-block` uses a per-client token bucket (default: **2** requests per **10** seconds). Tune with:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `HARPY_RATE_LIMIT` | `2` | Bucket capacity (max burst) |
+| `HARPY_RATE_LIMIT_WINDOW` | `10` | Seconds between token refills |
+
+Client identity is the first address in `X-Forwarded-For` when present, otherwise the TCP remote address. Exceeding the limit returns HTTP **429** with `{"error":"rate limit exceeded"}`. `GET` routes are not rate limited.
+
+```bash
+HARPY_RATE_LIMIT=1 HARPY_RATE_LIMIT_WINDOW=60 crystal run src/harpy.cr
+```
+
+## 7. Custom chain storage (`HARPY_DATA_DIR`)
+
+Default persistence is `data/chain.json`. Override the location for tests or deployments:
+
+```bash
+# Directory — writes to custom-data/chain.json
+HARPY_DATA_DIR=custom-data crystal run src/harpy.cr
+
+# Explicit file path
+HARPY_DATA_DIR=/var/lib/harpy/chain.json crystal run src/harpy.cr
+```
+
+On boot, an existing file is loaded and fully validated (`Chain#valid?`). A tampered or invalid chain raises `StorageError` and refuses to start.
+
+## 8. Automated tests
 
 ```bash
 crystal spec
@@ -83,13 +140,13 @@ Specs use `difficulty: 0` in helpers so mining finishes instantly. Canonical has
 - Linkage: `index` increments and `prev_hash` matches parent
 - Timestamps: child `timestamp` must be **≥ parent** (monotonic)
 
-## 6. Research context
+## 9. Research context
 
 | Layer | What Harpy demonstrates today | Deferred |
 |-------|------------------------------|----------|
 | **Tutorial** | PoW blocks, HTTP read/write, JSON persistence | P2P, UTXO/accounts |
-| **Production readiness** | Deterministic hashing, chain validation, invalid-chain rejection on boot | Rate limits, deployment auth |
-| **Hardening plan** | `Chain#valid?`, `/validate`, cumulative-work fork choice | Atomic writes, P2P fork rules |
+| **Production readiness** | Deterministic hashing, chain validation, invalid-chain rejection on boot | Atomic persistence, multi-node deployment |
+| **Hardening (Path A/B)** | Cumulative-work fork choice, per-IP rate limits, optional write auth, request/body size caps | P2P fork rules, global quotas, WAF |
 
 See **[THREAT_MODEL.md](./THREAT_MODEL.md)** for the full threat catalog (layers, assets, trust boundaries, Linear issue mapping).
 
@@ -98,7 +155,7 @@ Further reading (attached to Linear issues):
 - [Production readiness research](https://app.notion.com/p/berrymichael/production-ready-29c4b9c70df84cc8a5a503b845c80541)
 - [Security hardening plan](https://app.notion.com/p/3919cb079ddb8132ae08f16afdd9f0a0)
 
-## 7. Anchoring endgame
+## 10. Anchoring endgame
 
 Harpy's intended integration pattern is **hash on-chain, data off-chain**: applications commit digests (e.g. Merkle roots of audit logs or records) while keeping payloads in IPFS, object storage, or local systems. The chain proves *that* a hash existed at a point in time — it is not a database for arbitrary large blobs.
 
