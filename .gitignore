@@ -1,9 +1,15 @@
 # Crystal / Shards
-/docs/
+/docs/*
 !/docs/DEMO.md
 !/docs/THREAT_MODEL.md
 !/docs/STATE_MODEL.md
 !/docs/STORAGE_BACKENDS.md
+!/docs/SELFISH_MINING.md
+!/docs/CONFIRMATION_DEPTH.md
+!/docs/FINALITY.md
+!/docs/SYBIL_RESISTANCE.md
+!/docs/POS_CHECKPOINTING.md
+!/docs/INCIDENT_RESPONSE.md
 /lib/
 /bin/
 /.shards/
