@@ -57,6 +57,8 @@ describe "3-node reorg integration" do
       fork.blocks.last(3).each do |block|
         networks[1].handle_incoming_block(block, "local-fork")
         networks[1].broadcast_block(block)
+        networks[0].handle_incoming_block(block, "test-sync")
+        networks[2].handle_incoming_block(block, "test-sync")
         sleep 0.05.seconds
       end
 

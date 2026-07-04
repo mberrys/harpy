@@ -50,25 +50,28 @@ module Harpy
         @peer_manager.peers.each do |peer|
           next if @peer_manager.reputation.deprioritized?(peer.address)
 
-          peer.socket.try do |socket|
-            Wire.write(socket, message)
-          end
+          peer.send_message(message)
         end
       end
 
       def handle_incoming_block(block : Block, peer_address : String) : Chain::BlockAcceptResult
-        @mutex.synchronize do
-          result = @chain.accept_block!(block, @orphan_pool)
-          case result
+        result = @mutex.synchronize do
+          accept = @chain.accept_block!(block, @orphan_pool)
+          case accept
           when Chain::BlockAcceptResult::Connected, Chain::BlockAcceptResult::Reorganized
             Storage.save(@chain, @storage_path)
             @peer_manager.reputation.reward(peer_address)
-            broadcast_block(block)
           when Chain::BlockAcceptResult::Rejected
             @peer_manager.record_misbehavior(peer_address, 2)
           end
-          result
+          accept
         end
+
+        if result.in?({Chain::BlockAcceptResult::Connected, Chain::BlockAcceptResult::Reorganized, Chain::BlockAcceptResult::Orphaned})
+          broadcast_block(block)
+        end
+
+        result
       end
 
       private def accept_loop : Nil
@@ -103,7 +106,7 @@ module Harpy
         return unless @peer_manager.register(peer)
 
         begin
-          unless perform_handshake(socket, address, direction)
+          unless perform_handshake(peer, direction)
             @peer_manager.record_misbehavior(address)
             return
           end
@@ -113,7 +116,7 @@ module Harpy
           while @running
             message = Wire.read(socket)
             break unless message
-            handle_message(socket, address, message)
+            handle_message(peer, message)
           end
         ensure
           @peer_manager.disconnect(address)
@@ -121,17 +124,20 @@ module Harpy
         end
       end
 
-      private def perform_handshake(socket : IO, address : String, direction : PeerDirection) : Bool
+      private def perform_handshake(peer : Peer, direction : PeerDirection) : Bool
+        socket = peer.socket
+        return false unless socket
+
         case direction
         when PeerDirection::Outbound
-          send_handshake(socket)
+          send_handshake(peer)
           incoming = Wire.read(socket)
           return false unless incoming
 
           case incoming.type
           when "handshake"
             return false unless incoming.genesis_hash == @chain.genesis_hash
-            send_handshake_ack(socket)
+            send_handshake_ack(peer)
             true
           when "handshake_ack"
             true
@@ -144,20 +150,21 @@ module Harpy
           return false unless incoming.type == "handshake"
           return false unless incoming.genesis_hash == @chain.genesis_hash
 
-          send_handshake_ack(socket)
+          send_handshake_ack(peer)
           true
         end
       end
 
-      private def send_handshake(socket : IO) : Nil
-        Wire.write(socket, Message.handshake(@chain.genesis_hash, @chain.height, @chain.tip.hash))
+      private def send_handshake(peer : Peer) : Nil
+        peer.send_message(Message.handshake(@chain.genesis_hash, @chain.height, @chain.tip.hash))
       end
 
-      private def send_handshake_ack(socket : IO) : Nil
-        Wire.write(socket, Message.handshake_ack(@chain.height, @chain.tip.hash))
+      private def send_handshake_ack(peer : Peer) : Nil
+        peer.send_message(Message.handshake_ack(@chain.height, @chain.tip.hash))
       end
 
-      private def handle_message(socket : IO, address : String, message : Message) : Nil
+      private def handle_message(peer : Peer, message : Message) : Nil
+        address = peer.address
         case message.type
         when "inv"
           hashes = message.hashes || [] of String
@@ -166,16 +173,17 @@ module Harpy
           hashes.each do |hash|
             next if @chain.has_block?(hash)
 
-            Wire.write(socket, Message.get_block(hash))
+            peer.send_message(Message.get_block(hash))
           end
         when "getblock"
           hash = message.hash
           return unless hash
 
-          if block = @chain.block_by_hash(hash)
-            Wire.write(socket, Message.block_payload(block))
+          block = @chain.block_by_hash(hash) || @orphan_pool.get(hash)
+          if block
+            peer.send_message(Message.block_payload(block))
           else
-            Wire.write(socket, Message.reject("block not found"))
+            peer.send_message(Message.reject("block not found"))
           end
         when "block"
           json = message.block
@@ -184,11 +192,11 @@ module Harpy
           block = Block.from_json(json)
           handle_incoming_block(block, address)
         when "ping"
-          Wire.write(socket, Message.pong)
+          peer.send_message(Message.pong)
         end
       rescue ex
-        Log.warn { "p2p_message_error peer=#{address} error=#{ex.message}" }
-        @peer_manager.record_misbehavior(address)
+        Log.warn { "p2p_message_error peer=#{peer.address} error=#{ex.message}" }
+        @peer_manager.record_misbehavior(peer.address)
       end
 
       private def parse_host_port(address : String) : Tuple(String, Int32)
