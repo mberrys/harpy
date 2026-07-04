@@ -172,15 +172,16 @@ module Harpy
           halt env, status_code: 404, response: %({"error":"record not anchored (unknown or not yet mined)"})
         end
 
-        block = chain.blocks.find { |candidate| candidate.index == info.block_index }
-        unless block
-          halt env, status_code: 404, response: %({"error":"sealing block no longer on canonical chain"})
+        block = chain.block_by_hash(info.block_hash)
+        unless block && Spv.verify_anchor(record_hash, info.proof, block.header)
+          halt env, status_code: 404, response: %({"error":"record not anchored (unknown or not yet mined)"})
         end
 
         {
-          record_hash: record_hash,
-          block_index: info.block_index,
-          anchor_root: block.anchor_root,
+          record_hash:  record_hash,
+          block_index:  block.index,
+          block_hash:   block.hash,
+          anchor_root:  block.anchor_root,
           merkle_proof: info.proof,
           header:       block.header,
         }.to_json
@@ -233,16 +234,20 @@ module Harpy
           chain.utxo_set,
           chain.next_difficulty,
         )
-        anchor_root = Anchor.pending_root
+        batch = Anchor.take_pending_batch!
+        anchor_root = batch.try &.root || ""
+        sealed_leaves = batch.try &.leaves || [] of String
         new_block = Miner.mine_from_mempool(chain, miner_pubkey, verbose: true, anchor_root: anchor_root)
 
         unless chain.append!(new_block)
+          # Restore the batch if mining succeeded but validation rejected the block.
+          sealed_leaves.each { |hash| Anchor.submit(hash) unless Anchor.pending.includes?(hash) }
           Log.warn { "block_rejected index=#{new_block.index} prev_hash=#{new_block.prev_hash}" }
           halt env, status_code: 422, response: %({"error":"block rejected by chain validation"})
         end
 
         chain.mempool.remove_txids(selected.map(&.txid))
-        Anchor.seal!(new_block.index)
+        Anchor.seal!(new_block.hash, sealed_leaves)
         Storage.save(chain, @@storage_path)
         @@p2p.try &.broadcast_block(new_block)
         Log.info { "block_accepted index=#{new_block.index} hash=#{new_block.hash} height=#{chain.height}" }

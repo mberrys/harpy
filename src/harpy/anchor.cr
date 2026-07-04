@@ -13,60 +13,92 @@ module Harpy
   module Anchor
     extend self
 
+    @@mutex = Mutex.new
     @@pending = [] of String
-    @@sealed = Hash(Int32, Array(String)).new    # block index → anchored record hashes
-    @@record_block = Hash(String, Int32).new     # record hash → sealing block index
+    @@sealed = Hash(String, Array(String)).new # sealing block hash → anchored leaves
+    @@record_block = Hash(String, String).new  # record hash → sealing block hash
+
+    record PendingBatch, root : String, leaves : Array(String)
 
     # Queue a record hash for the next block. Returns false for a malformed hash.
     def submit(record_hash : String) : Bool
       return false unless valid_hash?(record_hash)
 
-      @@pending << record_hash unless @@pending.includes?(record_hash)
+      @@mutex.synchronize do
+        @@pending << record_hash unless @@pending.includes?(record_hash)
+      end
       true
     end
 
     def pending : Array(String)
-      @@pending.dup
+      @@mutex.synchronize { @@pending.dup }
     end
 
     # Merkle root of the current pending batch, or "" when nothing is pending
     # (empty root means the mined block omits `anchor_root` entirely).
     def pending_root : String
-      return "" if @@pending.empty?
+      @@mutex.synchronize do
+        return "" if @@pending.empty?
 
-      Merkle.root(@@pending)
+        Merkle.root(@@pending)
+      end
     end
 
-    # Record that `block_index` sealed the current pending batch, then clear it.
-    def seal!(block_index : Int32) : Nil
-      return if @@pending.empty?
+    # Atomically snapshot pending leaves for mining. Clears them so submissions
+    # during PoW queue for the following block instead of the in-flight batch.
+    def take_pending_batch! : PendingBatch?
+      @@mutex.synchronize do
+        return nil if @@pending.empty?
 
-      leaves = @@pending.dup
-      @@sealed[block_index] = leaves
-      leaves.each { |h| @@record_block[h] = block_index }
-      @@pending.clear
+        leaves = @@pending.dup
+        root = Merkle.root(leaves)
+        @@pending.clear
+        PendingBatch.new(root, leaves)
+      end
     end
 
-    record Proof, block_index : Int32, proof : Array(Merkle::ProofStep)
+    # Record that `block_hash` sealed exactly `leaves` (must match the mined anchor_root).
+    def seal!(block_hash : String, leaves : Array(String)) : Nil
+      return if leaves.empty?
+
+      @@mutex.synchronize do
+        @@sealed[block_hash] = leaves
+        leaves.each { |h| @@record_block[h] = block_hash }
+      end
+    end
+
+    record Proof, block_hash : String, proof : Array(Merkle::ProofStep)
 
     # Inclusion proof for a previously anchored record, or nil if unknown.
     def proof_for(record_hash : String) : Proof?
-      index = @@record_block[record_hash]?
-      return nil unless index
+      @@mutex.synchronize do
+        block_hash = @@record_block[record_hash]?
+        return nil unless block_hash
 
-      leaves = @@sealed[index]?
-      return nil unless leaves
+        leaves = @@sealed[block_hash]?
+        return nil unless leaves
 
-      position = leaves.index(record_hash)
-      return nil unless position
+        position = leaves.index(record_hash)
+        return nil unless position
 
-      Proof.new(index, Merkle.proof(leaves, position))
+        Proof.new(block_hash, Merkle.proof(leaves, position))
+      end
+    end
+
+    # Drop index entries for blocks no longer on the canonical chain (after reorg).
+    def prune_orphaned!(canonical_hashes : Set(String)) : Nil
+      @@mutex.synchronize do
+        @@sealed.select! { |hash, _| canonical_hashes.includes?(hash) }
+        @@record_block.select! { |_, hash| canonical_hashes.includes?(hash) }
+      end
     end
 
     def reset! : Nil
-      @@pending.clear
-      @@sealed.clear
-      @@record_block.clear
+      @@mutex.synchronize do
+        @@pending.clear
+        @@sealed.clear
+        @@record_block.clear
+      end
     end
 
     private def valid_hash?(hash : String) : Bool

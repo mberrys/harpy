@@ -1,4 +1,5 @@
 require "socket"
+require "./protocol"
 
 module Harpy
   module P2p
@@ -24,6 +25,14 @@ module Harpy
         @handshake_complete : Bool = false,
         @misbehavior_score : Int32 = 0,
       )
+        @write_mutex = Mutex.new
+      end
+
+      def send_message(message : Message) : Nil
+        @write_mutex.synchronize do
+          @socket.try { |socket| Wire.write(socket, message) }
+        end
+      rescue IO::Error
       end
 
       def mark_misbehavior(amount : Int32 = 1) : Nil

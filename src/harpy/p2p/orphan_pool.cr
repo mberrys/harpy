@@ -21,12 +21,13 @@ module Harpy
       end
 
       def add(block : Block) : Bool
-        return false if @blocks.has_key?(block.hash)
+        key = block_key(block)
+        return false if @blocks.has_key?(key)
         return false if @size >= MAX_SIZE
 
-        @blocks[block.hash] = block
+        @blocks[key] = block
         @children[block.prev_hash] ||= [] of String
-        @children[block.prev_hash] << block.hash unless @children[block.prev_hash].includes?(block.hash)
+        @children[block.prev_hash] << key unless @children[block.prev_hash].includes?(key)
         @size += 1
         true
       end
@@ -53,6 +54,11 @@ module Harpy
         @blocks.clear
         @children.clear
         @size = 0
+      end
+
+      # Unmined blocks may carry an empty `hash`; use the canonical preimage instead.
+      private def block_key(block : Block) : String
+        block.hash.empty? ? block.computed_hash : block.hash
       end
     end
   end

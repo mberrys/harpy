@@ -30,10 +30,10 @@ digests.each_with_index { |d, i| Harpy::Anchor.submit(d); puts "submitted line #
 puts
 
 # 2. Mine a block that seals the pending batch into anchor_root (part of the PoW hash).
-anchor_root = Harpy::Anchor.pending_root
-block = Harpy::Miner.mine_from_mempool(chain, miner_pubkey, anchor_root: anchor_root)
+batch = Harpy::Anchor.take_pending_batch!
+block = Harpy::Miner.mine_from_mempool(chain, miner_pubkey, anchor_root: batch.not_nil!.root)
 raise "block rejected" unless chain.append!(block)
-Harpy::Anchor.seal!(block.index)
+Harpy::Anchor.seal!(block.hash, batch.not_nil!.leaves)
 puts "mined block ##{block.index}"
 puts "  block hash : #{block.hash}"
 puts "  anchor_root: #{block.anchor_root}"
@@ -43,7 +43,7 @@ puts
 target = log_lines[2]
 target_digest = Digest::SHA256.hexdigest(target)
 info = Harpy::Anchor.proof_for(target_digest).not_nil!
-header = chain.blocks[info.block_index].header
+header = chain.block_by_hash(info.block_hash).not_nil!.header
 ok = Harpy::Spv.verify_anchor(target_digest, info.proof, header)
 puts "verify anchored line 2 => #{ok}"
 

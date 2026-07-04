@@ -45,7 +45,11 @@ module Harpy
       end
 
       def deprioritized?(peer_id : String) : Bool
-        score(peer_id) < 50
+        return true if score(peer_id) < 50
+
+        window = @inv_timestamps[peer_id]? || [] of Time
+        now = Time.utc
+        window.count { |t| (now - t).total_seconds <= RATE_WINDOW_SEC } > MAX_INV_PER_WINDOW
       end
     end
   end
