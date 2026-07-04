@@ -11,6 +11,8 @@
 [![Formal: TLA+](https://img.shields.io/badge/consensus-TLA%2B%20model--checked-2ea44f)](spec/tla/README.md)
 [![Status: educational](https://img.shields.io/badge/status-educational-informational)](#status)
 
+**[🚀 Quick start](#quick-start)** · **[📖 Guided demo](docs/DEMO.md)** · **[⚓ Anchoring](#anchoring-hash-on-chain-data-off-chain)** · **[📚 Documentation](#documentation)**
+
 </div>
 
 Harpy is a from-scratch blockchain node — signed UTXO transactions, a mempool, difficulty retargeting, cumulative-work fork choice with reorgs, peer-to-peer block gossip, and a hash-anchoring/verification layer with SPV light-client proofs. It's an **educational** project (single operator, not mainnet-grade), but every layer is built and tested the way a real node would be: adversarial specs, a formally model-checked consensus core, and a chaos harness. Named after **Harpocrates**, the Greek god of silence.
@@ -18,20 +20,6 @@ Harpy is a from-scratch blockchain node — signed UTXO transactions, a mempool,
 > **What it is not:** production financial infrastructure. No privacy, no external audit, no economic guarantees. Run it to *understand* how a chain works — see [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the honest security posture.
 
 ---
-
-## Contents
-
-- [Features](#features)
-- [Quick start](#quick-start)
-- [HTTP API](#http-api)
-- [Anchoring: hash-on-chain, data off-chain](#anchoring-hash-on-chain-data-off-chain)
-- [Configuration](#configuration)
-- [CLI](#cli)
-- [Architecture](#architecture)
-- [Documentation](#documentation)
-- [Development](#development)
-- [Status](#status)
-- [License](#license)
 
 ## Features
 
