@@ -1,3 +1,5 @@
+require "./anchor"
+
 class Harpy::Chain
   getter blocks : Array(Harpy::Block)
   getter utxo_set : Harpy::UtxoSet
@@ -145,6 +147,7 @@ class Harpy::Chain
     end
 
     @mempool = Harpy::Mempool.new
+    Harpy::Anchor.prune_orphaned!(Set.new(@blocks.map(&.hash)))
     true
   end
 
@@ -186,6 +189,17 @@ class Harpy::Chain
       return BlockAcceptResult::Orphaned
     end
 
+    if candidate = candidate_from_orphan_parent(block, orphan_pool)
+      candidate = extend_candidate_with_orphans(candidate, orphan_pool)
+
+      if heavier_valid_fork?(candidate)
+        reorg_to!(candidate)
+        prune_orphans_in_chain!(orphan_pool)
+        process_orphan_children!(tip.hash, orphan_pool)
+        return BlockAcceptResult::Reorganized
+      end
+    end
+
     orphan_pool.add(block)
     process_orphan_children!(tip.hash, orphan_pool)
     BlockAcceptResult::Orphaned
@@ -194,6 +208,27 @@ class Harpy::Chain
   private def heavier_valid_fork?(candidate : Array(Harpy::Block)) : Bool
     trial = Harpy::Chain.new(candidate)
     trial.valid? && trial.cumulative_work > cumulative_work
+  end
+
+  private def candidate_from_orphan_parent(
+    block : Harpy::Block,
+    orphan_pool : Harpy::P2p::OrphanPool,
+  ) : Array(Harpy::Block)?
+    tail = [block]
+    current = orphan_pool.get(block.prev_hash)
+    return nil unless current
+
+    loop do
+      tail.unshift(current)
+      if parent_index = find_block_index_by_hash(current.prev_hash)
+        return @blocks[0..parent_index] + tail
+      end
+
+      current = orphan_pool.get(current.prev_hash)
+      break unless current
+    end
+
+    nil
   end
 
   private def extend_candidate_with_orphans(

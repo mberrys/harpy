@@ -23,17 +23,29 @@ describe Harpy::Anchor do
   it "produces an inclusion proof after sealing that verifies against the anchor root" do
     records = (0...4).map { |i| rec("seal-#{i}") }
     records.each { |r| Harpy::Anchor.submit(r) }
-    root = Harpy::Anchor.pending_root
+    batch = Harpy::Anchor.take_pending_batch!
+    root = batch.not_nil!.root
+    block_hash = rec("block-7")
 
-    Harpy::Anchor.seal!(7)
+    Harpy::Anchor.seal!(block_hash, batch.not_nil!.leaves)
     Harpy::Anchor.pending.should be_empty
 
     records.each do |r|
       info = Harpy::Anchor.proof_for(r)
       info.should_not be_nil
-      info.not_nil!.block_index.should eq(7)
+      info.not_nil!.block_hash.should eq(block_hash)
       Harpy::Merkle.verify_proof(r, info.not_nil!.proof, root).should be_true
     end
+  end
+
+  it "does not seal records submitted after the mining snapshot" do
+    Harpy::Anchor.submit(rec("a"))
+    batch = Harpy::Anchor.take_pending_batch!
+    Harpy::Anchor.submit(rec("b"))
+
+    Harpy::Anchor.seal!(rec("block"), batch.not_nil!.leaves)
+    Harpy::Anchor.proof_for(rec("b")).should be_nil
+    Harpy::Anchor.pending.size.should eq(1)
   end
 
   it "returns nil for an unknown record" do
@@ -52,23 +64,33 @@ describe Harpy::Anchor do
     records = (0...3).map { |i| rec("e2e-#{i}") }
     records.each { |r| Harpy::Anchor.submit(r) }
 
-    anchor_root = Harpy::Anchor.pending_root
+    batch = Harpy::Anchor.take_pending_batch!
+    anchor_root = batch.not_nil!.root
     block = Harpy::Miner.mine_from_mempool(chain, pubkey, anchor_root: anchor_root)
     chain.append!(block).should be_true
-    Harpy::Anchor.seal!(block.index)
+    Harpy::Anchor.seal!(block.hash, batch.not_nil!.leaves)
 
     block.anchor_root.should eq(anchor_root)
     block.anchor_root.should_not be_empty
 
     records.each do |r|
       info = Harpy::Anchor.proof_for(r).not_nil!
-      sealing = chain.blocks[info.block_index]
+      sealing = chain.block_by_hash(info.block_hash).not_nil!
       Harpy::Spv.verify_anchor(r, info.proof, sealing.header).should be_true
     end
 
-    # A record that was never anchored must not verify against this block.
     reference = Harpy::Anchor.proof_for(records[0]).not_nil!
-    sealing = chain.blocks[reference.block_index]
+    sealing = chain.block_by_hash(reference.block_hash).not_nil!
     Harpy::Spv.verify_anchor(rec("forged"), reference.proof, sealing.header).should be_false
+  end
+
+  it "drops stale index entries after reorg pruning" do
+    orphan_hash = rec("orphan-block")
+    record = rec("stale-record")
+    Harpy::Anchor.seal!(orphan_hash, [record])
+
+    Harpy::Anchor.proof_for(record).should_not be_nil
+    Harpy::Anchor.prune_orphaned!(Set{"ab" * 32})
+    Harpy::Anchor.proof_for(record).should be_nil
   end
 end
