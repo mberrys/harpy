@@ -55,61 +55,124 @@ ensure
   File.delete?(storage_path) if storage_path && File.exists?(storage_path)
 end
 
-describe "POST /new-block request limits" do
-  it "rejects HTTP bodies larger than the configured limit with 413" do
-    oversized = %({"data":"#{"x" * (Harpy::Config.max_request_body_bytes + 1)}"})
-    response = harpy_test_response("POST", "/new-block", oversized)
-
-    response.status_code.should eq(413)
-    response.body.should eq(%({"error":"request body too large"}))
-  end
-
-  it "rejects block data larger than the configured cap with 400" do
-    payload = %({"data":"#{"y" * (Harpy::Config.max_block_data_bytes + 1)}"})
-    response = harpy_test_response("POST", "/new-block", payload)
-
-    response.status_code.should eq(400)
-    response.body.should eq(%({"error":"block data exceeds maximum size"}))
-  end
-
-  it "accepts block data within the configured cap" do
-    payload = %({"data":"#{"z" * (Harpy::Config.max_block_data_bytes - 20)}"})
-    response = harpy_test_response("POST", "/new-block", payload)
+describe "GET /health" do
+  it "reports chain validity and a last-saved timestamp" do
+    response = harpy_test_response("GET", "/health")
 
     response.status_code.should eq(200)
-    JSON.parse(response.body)["data"].as_s.bytesize.should eq(Harpy::Config.max_block_data_bytes - 20)
+    body = JSON.parse(response.body)
+    body["valid"].as_bool.should be_true
+    body["last_saved_at"].as_s.should_not be_empty
   end
 end
 
-describe "POST /new-block API key auth" do
+describe "GET /header/:index and /headers" do
+  it "returns a single block header whose hash matches" do
+    response = harpy_test_response("GET", "/header/0")
+
+    response.status_code.should eq(200)
+    body = JSON.parse(response.body)
+    header = Harpy::BlockHeader.from_json(response.body)
+    header.hash_matches?.should be_true
+    body["merkle_root"].as_s.should_not be_empty
+  end
+
+  it "404s for an unknown header index" do
+    response = harpy_test_response("GET", "/header/999")
+    response.status_code.should eq(404)
+  end
+
+  it "returns a header list" do
+    response = harpy_test_response("GET", "/headers")
+
+    response.status_code.should eq(200)
+    headers = Array(Harpy::BlockHeader).from_json(response.body)
+    headers.size.should eq(1)
+    headers.first.hash_matches?.should be_true
+  end
+end
+
+describe "GET /proof/:index/:txid" do
+  it "returns a header + merkle proof that verifies via SPV" do
+    # Fresh chain has a genesis coinbase; fetch its txid from the block.
+    block_resp = harpy_test_response("GET", "/block/0")
+    block = Harpy::Block.from_json(JSON.parse(block_resp.body))
+    coinbase_txid = block.transactions.first.txid
+
+    response = harpy_test_response("GET", "/proof/0/#{coinbase_txid}")
+    response.status_code.should eq(200)
+
+    parsed = JSON.parse(response.body)
+    header = Harpy::BlockHeader.from_json(parsed["header"].to_json)
+    proof = Array(Harpy::Merkle::ProofStep).from_json(parsed["merkle_proof"].to_json)
+
+    Harpy::Spv.verify_inclusion(coinbase_txid, proof, header).should be_true
+  end
+
+  it "404s for a txid not in the block" do
+    response = harpy_test_response("GET", "/proof/0/#{"ab" * 32}")
+    response.status_code.should eq(404)
+  end
+end
+
+describe "anchoring API endpoints" do
+  it "accepts a valid record hash submission" do
+    Harpy::Anchor.reset!
+    record = Digest::SHA256.hexdigest("endpoint-record")
+    response = harpy_test_response("POST", "/anchor", %({"record_hash":"#{record}"}))
+
+    response.status_code.should eq(200)
+    JSON.parse(response.body)["pending"].as_i.should be >= 1
+  end
+
+  it "rejects a malformed record hash with 400" do
+    Harpy::Anchor.reset!
+    response = harpy_test_response("POST", "/anchor", %({"record_hash":"nope"}))
+    response.status_code.should eq(400)
+  end
+
+  it "404s for a record that was never anchored" do
+    Harpy::Anchor.reset!
+    response = harpy_test_response("GET", "/anchor/#{"ab" * 32}")
+    response.status_code.should eq(404)
+  end
+end
+
+describe "GET /mempool" do
+  it "returns an empty mempool on a fresh chain" do
+    response = harpy_test_response("GET", "/mempool")
+
+    response.status_code.should eq(200)
+    JSON.parse(response.body)["transactions"].as_a.should be_empty
+  end
+end
+
+describe "POST /mine" do
+  it "mines and appends a coinbase-only block" do
+    _, verify_key = Harpy::SpecHelpers.generate_keypair
+    pubkey = Harpy::Crypto.pubkey_hex(verify_key)
+    response = harpy_test_response("POST", "/mine", %({"miner_pubkey":"#{pubkey}"}))
+
+    response.status_code.should eq(200)
+    JSON.parse(response.body)["index"].as_i.should eq(1)
+  end
+
   it "returns 401 when the API key is required but missing" do
-    response = harpy_test_response("POST", "/new-block", %({"data":"hello"}), api_key: "secret")
+    _, verify_key = Harpy::SpecHelpers.generate_keypair
+    pubkey = Harpy::Crypto.pubkey_hex(verify_key)
+    response = harpy_test_response("POST", "/mine", %({"miner_pubkey":"#{pubkey}"}), api_key: "secret")
 
     response.status_code.should eq(401)
     response.body.should eq(%({"error":"unauthorized"}))
   end
+end
 
-  it "accepts Authorization Bearer when an API key is configured" do
-    response = harpy_test_response(
-      "POST",
-      "/new-block",
-      %({"data":"authenticated"}),
-      api_key: "secret",
-      headers: {"Authorization" => "Bearer secret"},
-    )
+describe "POST /mine request limits" do
+  it "rejects HTTP bodies larger than the configured limit with 413" do
+    oversized = %({"miner_pubkey":"#{"x" * (Harpy::Config.max_request_body_bytes + 1)}"})
+    response = harpy_test_response("POST", "/mine", oversized)
 
-    response.status_code.should eq(200)
-  end
-
-  it "accepts X-API-Key when an API key is configured" do
-    response = harpy_test_response(
-      "POST",
-      "/new-block",
-      %({"data":"authenticated"}),
-      api_key: "secret",
-      headers: {"X-API-Key" => "secret"},
-    )
-
-    response.status_code.should eq(200)
+    response.status_code.should eq(413)
+    response.body.should eq(%({"error":"request body too large"}))
   end
 end

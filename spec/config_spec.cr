@@ -19,10 +19,10 @@ describe Harpy::Config do
     end
   end
 
-  it "exposes request and block data size limits" do
+  it "exposes request and block transaction size limits" do
     Harpy::Config.max_request_body_bytes.should eq(64 * 1024)
-    Harpy::Config.max_block_data_bytes.should eq(32 * 1024)
-    Harpy::Config.max_block_data_bytes.should be < Harpy::Config.max_request_body_bytes
+    Harpy::Config.max_block_transactions_bytes.should eq(32 * 1024)
+    Harpy::Config.max_block_transactions_bytes.should be < Harpy::Config.max_request_body_bytes
   end
 
   it "uses the default storage path when HARPY_DATA_DIR is unset" do
@@ -61,6 +61,18 @@ describe Harpy::Config do
     end
   end
 
+  it "binds to loopback by default" do
+    Harpy::SpecHelpers.with_env("HARPY_BIND_HOST", nil) do
+      Harpy::Config.bind_host.should eq("127.0.0.1")
+    end
+  end
+
+  it "reads bind host from HARPY_BIND_HOST" do
+    Harpy::SpecHelpers.with_env("HARPY_BIND_HOST", "0.0.0.0") do
+      Harpy::Config.bind_host.should eq("0.0.0.0")
+    end
+  end
+
   it "allows writes when HARPY_API_KEY is unset" do
     request = HTTP::Request.new("POST", "/new-block")
     Harpy::SpecHelpers.with_env("HARPY_API_KEY", nil) do
@@ -86,6 +98,51 @@ describe Harpy::Config do
     request = HTTP::Request.new("POST", "/new-block")
 
     Harpy::Config.write_authorized?(request, "secret-key").should be_false
+  end
+
+  it "rejects a wrong Bearer token" do
+    request = HTTP::Request.new("POST", "/new-block")
+    request.headers["Authorization"] = "Bearer wrong-key"
+
+    Harpy::Config.write_authorized?(request, "secret-key").should be_false
+  end
+
+  it "rejects a wrong X-API-Key" do
+    request = HTTP::Request.new("POST", "/new-block")
+    request.headers["X-API-Key"] = "wrong-key"
+
+    Harpy::Config.write_authorized?(request, "secret-key").should be_false
+  end
+
+  it "rejects a token that is a prefix of the key (length-safe comparison)" do
+    request = HTTP::Request.new("POST", "/new-block")
+    request.headers["X-API-Key"] = "secret"
+
+    Harpy::Config.write_authorized?(request, "secret-key").should be_false
+  end
+end
+
+describe "Harpy::Config.trust_proxy?" do
+  it "defaults to false" do
+    Harpy::SpecHelpers.with_env("HARPY_TRUST_PROXY", nil) do
+      Harpy::Config.trust_proxy?.should be_false
+    end
+  end
+
+  it "is true for common truthy values" do
+    {"1", "true", "TRUE", "yes", "on"}.each do |value|
+      Harpy::SpecHelpers.with_env("HARPY_TRUST_PROXY", value) do
+        Harpy::Config.trust_proxy?.should be_true
+      end
+    end
+  end
+
+  it "is false for other values" do
+    {"0", "false", "no", ""}.each do |value|
+      Harpy::SpecHelpers.with_env("HARPY_TRUST_PROXY", value) do
+        Harpy::Config.trust_proxy?.should be_false
+      end
+    end
   end
 end
 

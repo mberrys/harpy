@@ -1,6 +1,9 @@
 require "json"
 require "digest/sha256"
+require "log"
 require "./config"
+require "./storage/backend"
+require "./storage/file_backend"
 
 module Harpy
   class StorageError < Exception; end
@@ -8,89 +11,59 @@ module Harpy
   module Storage
     extend self
 
+    Log = ::Log.for("harpy.storage")
+
     DEFAULT_PATH = "data/chain.json"
 
-    # Bump when the on-disk envelope schema changes. Add a
-    # `migrate_v#{CURRENT_VERSION - 1}_to_v#{CURRENT_VERSION}` and dispatch to
-    # it from `load` alongside the existing `migrate_v1_to_v2`.
-    CURRENT_VERSION = 2
-
-    private struct Envelope
+    # On-disk envelope: a SHA-256 over the canonical `blocks.to_json` alongside
+    # the blocks themselves. The checksum lets a backend detect bit-rot,
+    # truncation, or manual edits before any Chain is constructed — a corruption
+    # check distinct from the semantic `Chain#valid?` check that runs afterward.
+    struct Envelope
       include JSON::Serializable
 
-      getter version : Int32
       getter checksum : String
       getter blocks : Array(Block)
 
-      def initialize(@version : Int32, @checksum : String, @blocks : Array(Block))
+      def initialize(@checksum : String, @blocks : Array(Block))
+      end
+
+      def self.wrap(blocks : Array(Block)) : Envelope
+        new(Digest::SHA256.hexdigest(blocks.to_json), blocks)
+      end
+
+      def checksum_valid? : Bool
+        Digest::SHA256.hexdigest(@blocks.to_json) == @checksum
       end
     end
 
-    # Checksum depends on `Block`'s getter declaration order (JSON::Serializable
-    # serializes fields in declaration order). Do not reorder Block's getters
-    # without a version bump — it would silently break existing checksums.
-    private def compute_checksum(blocks : Array(Block)) : String
-      Digest::SHA256.hexdigest(blocks.to_json)
-    end
-
-    # v1 is the historical bare-array `chain.json` format (no envelope, no
-    # checksum, no version) — everything written before this change.
-    private def migrate_v1_to_v2(bare_blocks : Array(Block)) : Envelope
-      Envelope.new(CURRENT_VERSION, compute_checksum(bare_blocks), bare_blocks)
+    # The backend the free functions delegate to for a given path. Isolated here
+    # so a future KV backend is a one-line swap (see docs/STORAGE_BACKENDS.md).
+    def backend_for(path : String) : Backend
+      FileBackend.new(path)
     end
 
     def load(path : String = DEFAULT_PATH) : Chain?
-      return nil unless File.exists?(path)
-
-      raw = File.read(path)
-      json = JSON.parse(raw)
-
-      envelope =
-        case json.raw
-        when Array
-          migrate_v1_to_v2(Array(Block).from_json(raw))
-        when Hash
-          Envelope.from_json(raw)
-        else
-          raise StorageError.new("chain file is not a valid chain document")
-        end
-
-      unless envelope.version == CURRENT_VERSION
-        raise StorageError.new("unsupported chain storage version #{envelope.version} (expected #{CURRENT_VERSION})")
-      end
-
-      unless compute_checksum(envelope.blocks) == envelope.checksum
-        raise StorageError.new("chain file checksum mismatch (possible corruption or tampering)")
-      end
-
-      Chain.new(envelope.blocks)
-    rescue ex : JSON::Error
-      raise StorageError.new("chain file is not valid JSON: #{ex.message}")
+      backend_for(path).load
     end
 
     def save(chain : Chain, path : String = DEFAULT_PATH) : Nil
-      dir = File.dirname(path)
-      Dir.mkdir_p(dir)
-
-      envelope = Envelope.new(CURRENT_VERSION, compute_checksum(chain.blocks), chain.blocks)
-
-      tmp_path = File.tempname("chain", ".json.tmp", dir: dir)
-      File.open(tmp_path, "w") do |file|
-        file.print(envelope.to_json)
-        file.flush
-        file.fsync
-      end
-      File.rename(tmp_path, path)
+      backend_for(path).save(chain)
     end
 
     def load_or_genesis(path : String = DEFAULT_PATH, verbose : Bool = false) : Chain
-      if chain = load(path)
-        raise StorageError.new("stored chain failed validation") unless chain.valid?
+      backend = backend_for(path)
+
+      if chain = backend.load
+        unless chain.valid?
+          Log.error { "chain_load_failed path=#{path} reason=validation_failed" }
+          raise StorageError.new("stored chain failed validation")
+        end
 
         chain
       else
         chain = Chain.genesis_chain(difficulty: Config.genesis_difficulty, verbose: verbose)
-        save(chain, path)
+        backend.save(chain)
         chain
       end
     end
