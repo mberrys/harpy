@@ -10,7 +10,11 @@ module Harpy
   # block header — the whole point of anchoring is that a light client can trust
   # the commitment without running a full node.
   class AnchorClient
-    def initialize(@base_url : String = "http://127.0.0.1:3000", @api_key : String? = nil)
+    def initialize(
+      @trusted_genesis_hash : String,
+      @base_url : String = "http://127.0.0.1:3000",
+      @api_key : String? = nil,
+    )
     end
 
     # Submit a record hash; returns the number of pending (un-mined) records.
@@ -30,7 +34,14 @@ module Harpy
       parsed = JSON.parse(resp.body)
       header = BlockHeader.from_json(parsed["header"].to_json)
       proof = Array(Merkle::ProofStep).from_json(parsed["merkle_proof"].to_json)
-      Spv.verify_anchor(record_hash, proof, header)
+      block_index = parsed["block_index"].as_i
+      headers_resp = HTTP::Client.get("#{@base_url}/headers?from=0&to=#{block_index}")
+      return false unless headers_resp.success?
+
+      headers = Array(BlockHeader).from_json(headers_resp.body)
+      return false if headers.empty? || headers.last.hash != header.hash
+
+      Spv.verify_anchor(record_hash, proof, headers, @trusted_genesis_hash)
     end
 
     private def auth_headers : HTTP::Headers

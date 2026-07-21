@@ -59,14 +59,15 @@ The response has `{record_hash, block_index, anchor_root, merkle_proof, header}`
 verification:
 
 ```crystal
-client = Harpy::AnchorClient.new("http://127.0.0.1:3000")
+client = Harpy::AnchorClient.new(trusted_genesis_hash, "http://127.0.0.1:3000")
 client.submit(digest)          # queue a record hash
 # ... after a block is mined ...
-client.verify(digest)          # fetch proof + verify against the sealing header → Bool
+client.verify(digest)          # fetch header chain + proof; verify from trusted genesis → Bool
 ```
 
-`verify` fetches the proof and runs `Harpy::Spv.verify_anchor` client-side, so a
-caller trusts the commitment without re-downloading the chain.
+`verify` fetches every header from the caller-pinned genesis through the sealing
+block, validates linkage, timestamps, difficulty, PoW, and hashes, and only then
+runs `Harpy::Spv.verify_anchor`. A standalone sealing header is not sufficient.
 
 ## Limitations (tutorial scope)
 

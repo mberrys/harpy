@@ -11,6 +11,21 @@ Topology and P2P behavior: [P2P.md](./P2P.md). Deployment guardrails:
 
 ## Stand it up
 
+The Compose testnet refuses to start without a non-empty API key. Generate one
+and store it in the ignored `.env` file:
+
+```bash
+export HARPY_API_KEY="$(openssl rand -hex 32)"
+printf 'HARPY_API_KEY=%s\n' "$HARPY_API_KEY" > .env
+```
+
+`harpy-block-v3` is an intentional consensus reset. Before the first v3 start,
+remove the incompatible v2 volumes:
+
+```bash
+docker compose -f docker-compose.testnet.yml down -v
+```
+
 ```bash
 docker compose -f docker-compose.testnet.yml up -d --build
 ```
@@ -30,6 +45,7 @@ Smoke test — mine on one node, watch it arrive on another:
 ```bash
 curl -s http://127.0.0.1:3002/health
 curl -s -X POST http://127.0.0.1:3001/mine \
+  -H "Authorization: Bearer $HARPY_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"miner_pubkey":"<64-hex-ed25519-pubkey>"}'
 curl -s http://127.0.0.1:3003/validate   # height advances via gossip
@@ -37,15 +53,15 @@ curl -s http://127.0.0.1:3003/validate   # height advances via gossip
 
 ## Operating discipline
 
-- **Pre-release validation.** Every candidate build runs here before tagging:
-  `docker compose -f docker-compose.testnet.yml up -d --build` on the release
-  branch, then the smoke test above plus a forced reorg (stop `node3`, mine two
-  blocks on `seed`, one on restarted `node3`, confirm it adopts the heavier
-  chain and `/validate` agrees across nodes).
+- **Pre-release validation.** Every candidate runs
+  `HARPY_API_KEY=... bash scripts/testnet-smoke.sh`. The script checks shared
+  genesis, authenticated mining, gossip, an isolated competing branch, a
+  cumulative-work reorg, and final health/tip convergence.
 - **Persistence policy.** Volumes are kept across releases. A **chain reset**
   (`docker compose -f docker-compose.testnet.yml down -v`) is a breaking event:
-  announce it, and bump `HARPY_DIFFICULTY`/genesis settings only at reset
-  boundaries.
+  announce it, and change `HARPY_DIFFICULTY`, `HARPY_GENESIS_PUBKEY`, or
+  `HARPY_GENESIS_TIMESTAMP` only at reset boundaries. The v2-to-v3 reset is
+  mandatory; old envelopes fail with an explicit reset error.
 - **Monitoring.** `GET /health` on each node is the liveness probe (Docker
   healthchecks poll it every 30s); it reports chain validity, peer count, and
   eclipse-risk status. Persist the output somewhere visible (cron + append to a
@@ -63,8 +79,8 @@ The compose file deliberately binds to `127.0.0.1`. Before publishing the API
 or P2P port on a public address, work through the checklist — all switches
 already exist:
 
-1. Set `HARPY_API_KEY` (in `.env`) so `/tx`, `/mine`, and `/anchor` require
-   auth; verify a 401 without it.
+1. Keep the required `HARPY_API_KEY` secret and verify write endpoints return
+   401 without an exact Bearer token or non-empty `X-API-Key`.
 2. Keep rate limits at defaults or tighter (`HARPY_RATE_LIMIT`,
    `HARPY_RATE_LIMIT_WINDOW`); they bound PoW CPU burn per client.
 3. Prefer async mining (`POST /mine` with `"async": true`) for anything

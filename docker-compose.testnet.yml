@@ -14,9 +14,10 @@ x-harpy-common: &harpy-common
     HARPY_BIND_HOST: "0.0.0.0" # inside the container network only
     HARPY_DATA_DIR: /data
     HARPY_DIFFICULTY: "3"
-    # Set HARPY_API_KEY in .env to require auth on all write endpoints.
-    HARPY_API_KEY: ${HARPY_API_KEY:-}
-    HARPY_RATE_LIMIT: "2"
+    HARPY_GENESIS_TIMESTAMP: "2026-07-20 00:00:00 UTC"
+    # Testnet writes are never unauthenticated. Put a non-empty key in .env.
+    HARPY_API_KEY: ${HARPY_API_KEY:?Set a non-empty HARPY_API_KEY in .env}
+    HARPY_RATE_LIMIT: ${HARPY_RATE_LIMIT:-2}
     HARPY_RATE_LIMIT_WINDOW: "10"
 
 services:

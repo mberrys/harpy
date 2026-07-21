@@ -11,6 +11,7 @@ module Harpy
       return false unless tx.version == Economics::TX_VERSION
       return false if tx.inputs.empty? || tx.outputs.empty?
       return false if tx.duplicate_inputs?
+      return false unless tx.outputs.all? { |output| Crypto.valid_pubkey_hex?(output.pubkey) }
 
       input_sum = 0_u64
       tx.inputs.each do |input|
@@ -39,6 +40,7 @@ module Harpy
     ) : Bool
       return false unless coinbase.version == Economics::TX_VERSION
       return false unless coinbase.outputs.size == 1
+      return false unless Crypto.valid_pubkey_hex?(coinbase.outputs.first.pubkey)
       return false unless coinbase.height == block_height
       return false unless coinbase.outputs.first.pubkey == miner_pubkey
       return false unless coinbase.outputs.first.amount == Economics::BLOCK_REWARD + fees_in_block
@@ -102,6 +104,7 @@ module Harpy
 
       first = block.transactions.first
       return false unless first.is_a?(CoinbaseTx)
+      return false unless first.outputs.size == 1
 
       working = utxo_set.dup_set
       user_txs = user_transactions(block)
@@ -118,6 +121,28 @@ module Harpy
       return false unless block.merkle_root == Merkle.root(block.transactions.map(&.txid))
 
       true
+    end
+
+    # Checks transaction shape without needing the parent UTXO set. This is
+    # safe to run before admitting an unknown-parent block to the orphan pool.
+    def block_transactions_structurally_valid?(block : Block) : Bool
+      return false if block.transactions.empty?
+
+      first = block.transactions.first
+      return false unless first.is_a?(CoinbaseTx)
+      return false unless first.version == Economics::TX_VERSION
+      return false unless first.outputs.size == 1
+      return false unless Crypto.valid_pubkey_hex?(first.outputs.first.pubkey)
+
+      block.transactions[1..].each do |entry|
+        return false unless entry.is_a?(Transaction)
+        return false unless entry.version == Economics::TX_VERSION
+        return false if entry.inputs.empty? || entry.outputs.empty?
+        return false if entry.duplicate_inputs?
+        return false unless entry.outputs.all? { |output| Crypto.valid_pubkey_hex?(output.pubkey) }
+      end
+
+      block.merkle_root == Merkle.root(block.transactions.map(&.txid))
     end
 
     def apply_block(block : Block, utxo_set : UtxoSet) : UndoEntry

@@ -109,6 +109,7 @@ Default PoW difficulty: **3** leading zero hex digits (`Harpy::Block::DEFAULT_DI
 | `HARPY_RATE_LIMIT_WINDOW` | `10` | Refill interval in seconds for the token bucket |
 | `HARPY_TRUST_PROXY` | unset | When truthy, trust `X-Forwarded-For` for client identity (set only behind a trusted reverse proxy) |
 | `HARPY_GENESIS_PUBKEY` | tutorial default | Ed25519 pubkey hex for genesis coinbase output |
+| `HARPY_GENESIS_TIMESTAMP` | `2026-07-20 00:00:00 UTC` | Deterministic v3 genesis timestamp shared by peers |
 | `HARPY_BIND_HOST` | `127.0.0.1` | HTTP bind address (`0.0.0.0` to expose on LAN) |
 | `HARPY_HTTP_PORT` / `PORT` | `3000` | HTTP API port |
 | `HARPY_P2P_DISABLE` | unset | Set to `1` to disable P2P |
@@ -120,13 +121,15 @@ Rate limiting applies to `POST /mine` and `POST /tx`. Client identity uses the f
 
 ### Hash serialization
 
-`Block#computed_hash` SHA-256 digests a canonical, **length-prefixed** encoding (domain tag `harpy-block-v2`) of `index`, `timestamp`, `merkle_root`, `prev_hash`, and `nonce` — each variable field prefixed by its byte length. **`difficulty` is not included.** Transaction bodies are committed via `merkle_root` only. Pinned vectors: `spec/fixtures/hash_vectors.json`.
+`Block#computed_hash` SHA-256 digests a canonical, **length-prefixed** encoding (domain tag `harpy-block-v3`) of `index`, `timestamp`, `merkle_root`, `prev_hash`, `difficulty`, `nonce`, and `anchor_root` — each variable field prefixed by its byte length. `anchor_root` is committed even when empty. Transaction bodies are committed via `merkle_root` only. Pinned vectors: `spec/fixtures/hash_vectors.json`.
 
 Transaction `txid` and signing digest: SHA-256 over canonical JSON of `version`, `inputs` (without signatures), `outputs` (keys sorted lexicographically).
 
 ### Validation
 
-Blocks must satisfy linkage, PoW prefix, hash integrity, and **monotonic timestamps** (child ≥ parent).
+Blocks must satisfy linkage, PoW prefix, hash integrity, expected difficulty,
+and timestamps strictly greater than the median of the previous 11 blocks and
+no more than two hours ahead of the validation clock.
 
 Fork replacement (`Chain#replace_if_more_work_valid!`) compares **cumulative PoW work** — each block contributes `16^difficulty` (`Block#work`) — not block count alone. Threat model: `docs/THREAT_MODEL.md`. Selfish-mining thresholds: `docs/SELFISH_MINING.md`. Confirmation depth: `docs/CONFIRMATION_DEPTH.md`. Finality model: `docs/FINALITY.md`.
 

@@ -12,7 +12,7 @@ module Harpy
 
     @@chain : Chain? = nil
     @@storage_path = Config.storage_path
-    @@api_key : String? = Config.api_key
+    @@api_key : String? = nil
     @@p2p : P2p::Network? = nil
     @@chain_mutex = Mutex.new
 
@@ -138,7 +138,12 @@ module Harpy
       end
 
       get "/block/:index" do |env|
-        index = env.params.url["index"].to_i
+        raw_index = env.params.url["index"]
+        index = raw_index.to_i?
+        unless index && index >= 0
+          env.response.content_type = "application/json"
+          halt env, status_code: 400, response: %({"error":"index must be a non-negative integer"})
+        end
         block = chain.blocks.find { |candidate| candidate.index == index }
 
         unless block
@@ -150,7 +155,12 @@ module Harpy
 
       # Light-client header endpoints: sync/verify PoW without transaction bodies.
       get "/header/:index" do |env|
-        index = env.params.url["index"].to_i
+        raw_index = env.params.url["index"]
+        index = raw_index.to_i?
+        unless index && index >= 0
+          env.response.content_type = "application/json"
+          halt env, status_code: 400, response: %({"error":"index must be a non-negative integer"})
+        end
         block = chain.blocks.find { |candidate| candidate.index == index }
 
         unless block
@@ -162,14 +172,25 @@ module Harpy
 
       get "/headers" do |env|
         blocks = chain.blocks
-        from = env.params.query["from"]?.try(&.to_i?) || 0
-        to = env.params.query["to"]?.try(&.to_i?) || (blocks.size - 1)
+        raw_from = env.params.query["from"]?
+        raw_to = env.params.query["to"]?
+        from = raw_from ? raw_from.to_i? : 0
+        to = raw_to ? raw_to.to_i? : (blocks.size - 1)
+        unless from && to && from >= 0 && to >= 0 && from <= to
+          env.response.content_type = "application/json"
+          halt env, status_code: 400, response: %({"error":"header range must use non-negative integers with from <= to"})
+        end
         blocks.select { |b| b.index >= from && b.index <= to }.map(&.header).to_json
       end
 
       # SPV inclusion proof: header + Merkle path for a txid, verifiable client-side.
       get "/proof/:index/:txid" do |env|
-        index = env.params.url["index"].to_i
+        raw_index = env.params.url["index"]
+        index = raw_index.to_i?
+        unless index && index >= 0
+          env.response.content_type = "application/json"
+          halt env, status_code: 400, response: %({"error":"index must be a non-negative integer"})
+        end
         target = env.params.url["txid"]
         block = chain.blocks.find { |candidate| candidate.index == index }
 
@@ -214,7 +235,8 @@ module Harpy
         end
 
         block = chain.block_by_hash(info.block_hash)
-        unless block && Spv.verify_anchor(record_hash, info.proof, block.header)
+        headers = block ? chain.blocks[0..block.index].map(&.header) : [] of BlockHeader
+        unless block && Spv.verify_anchor(record_hash, info.proof, headers, chain.genesis_hash)
           halt env, status_code: 404, response: %({"error":"record not anchored (unknown or not yet mined)"})
         end
 
@@ -264,8 +286,8 @@ module Harpy
           halt env, status_code: 400, response: %({"error":"missing miner_pubkey field"})
         end
 
-        unless pubkey_field.is_a?(String) && pubkey_field.size == 64
-          halt env, status_code: 400, response: %({"error":"miner_pubkey must be 64-char hex Ed25519 public key"})
+        unless pubkey_field.is_a?(String) && Crypto.valid_pubkey_hex?(pubkey_field)
+          halt env, status_code: 400, response: %({"error":"miner_pubkey must be a 64-char lowercase hex Ed25519 public key"})
         end
 
         miner_pubkey = pubkey_field
@@ -307,6 +329,7 @@ module Harpy
       api_key : String? = Config.api_key,
       rate_limiter : RateLimiter = RateLimiter.from_env,
     )
+      Config.validate!(api_key)
       reset!(storage_path, api_key)
       configure_kemal!(rate_limiter)
       register_routes!

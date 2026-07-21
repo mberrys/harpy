@@ -2,16 +2,22 @@
 # Used by docker-compose.testnet.yml for the staging testnet (MIC-74).
 FROM crystallang/crystal:1.20-alpine AS build
 WORKDIR /app
+RUN apk add --no-cache gmp-static
 COPY shard.yml shard.lock ./
 RUN shards install --production
 COPY src ./src
 RUN shards build harpy --release --static --no-debug
 
 FROM alpine:3.21
-RUN apk add --no-cache curl && adduser -D -H harpy
+RUN apk add --no-cache curl \
+  && adduser -D -H harpy \
+  && mkdir -p /data \
+  && chown harpy:harpy /data
 WORKDIR /app
 COPY --from=build /app/bin/harpy /usr/local/bin/harpy
 COPY public ./public
+ENV HARPY_DATA_DIR=/data
+VOLUME ["/data"]
 USER harpy
 # HTTP API / P2P gossip
 EXPOSE 3000 9333
